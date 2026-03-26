@@ -49,6 +49,15 @@ class DataHealer:
             close = difflib.get_close_matches(target_norm, normalized.keys(), n=1, cutoff=0.7)
             if close:
                 mapping[normalized[close[0]]] = target
+        # Extra semantic hints for common variations
+        for col in raw_headers:
+            norm = self._normalize(col)
+            if "date" in norm and "Date" not in mapping.values():
+                mapping[col] = "Date"
+            if any(token in norm for token in ["category", "product", "prodcat"]) and "Product Category" not in mapping.values():
+                mapping[col] = "Product Category"
+            if any(token in norm for token in ["revenue", "rev", "sales"]) and "Revenue" not in mapping.values():
+                mapping[col] = "Revenue"
         return mapping
 
     @staticmethod

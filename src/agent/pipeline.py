@@ -89,6 +89,7 @@ class AgentPipeline:
                         filename=file.name,
                         message=f"Missing required columns: {', '.join(mapping.unmapped_required)}",
                     )
+                    self._with_retries(lambda: self.drive.move_file(file.id, failed_folder_id))
                     self.emailer.send(
                         subject=f"Data Agent: Missing columns in {file.name}",
                         body=f"Missing required columns: {', '.join(mapping.unmapped_required)}",
