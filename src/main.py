@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dotenv import load_dotenv
+
 from agent.config import load_config
 from agent.pipeline import AgentPipeline
 
 
 def main() -> None:
+    load_dotenv()
     config = load_config()
     pipeline = AgentPipeline(config)
     pipeline.run()
