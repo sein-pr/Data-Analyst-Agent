@@ -175,7 +175,9 @@ class PPTXGenerator:
         title_tf.paragraphs[0].font.size = Pt(28)
         title_tf.paragraphs[0].font.bold = True
 
-        body_box = slide.shapes.add_textbox(Inches(0.6), Inches(1.6), Inches(12.0), Inches(4.5))
+        self._add_schema_summary_table(slide, mapping)
+
+        body_box = slide.shapes.add_textbox(Inches(0.6), Inches(1.6), Inches(7.0), Inches(4.8))
         body_tf = body_box.text_frame
         body_tf.text = "Schema alignment completed."
         body_tf.paragraphs[0].font.size = Pt(20)
@@ -212,6 +214,28 @@ class PPTXGenerator:
                 p.text = col
                 p.level = 1
                 p.font.size = Pt(18)
+
+    def _add_schema_summary_table(self, slide, mapping: MappingResult) -> None:
+        table = slide.shapes.add_table(
+            rows=4,
+            cols=2,
+            left=Inches(8.0),
+            top=Inches(1.6),
+            width=Inches(4.8),
+            height=Inches(2.6),
+        ).table
+        table.cell(0, 0).text = "Schema Metric"
+        table.cell(0, 1).text = "Count"
+        self._style_table_header(table)
+
+        metrics = [
+            ("Mapped Columns", str(len(mapping.mapping))),
+            ("New Columns", str(len(mapping.new_columns))),
+            ("Missing Required", str(len(mapping.unmapped_required))),
+        ]
+        for idx, (label, value) in enumerate(metrics, start=1):
+            table.cell(idx, 0).text = label
+            table.cell(idx, 1).text = value
 
     def _add_recommendations_slide(
         self, prs: Presentation, analysis: AnalysisResult, bullets: List[str]
