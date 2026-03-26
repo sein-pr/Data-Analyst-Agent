@@ -159,6 +159,7 @@ class PPTXGenerator:
     def _add_kpi_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
+        self._add_data_health_badge(slide, analysis)
 
         title_box = slide.shapes.add_textbox(Inches(0.6), Inches(0.6), Inches(8.0), Inches(0.6))
         title_tf = title_box.text_frame
@@ -207,6 +208,7 @@ class PPTXGenerator:
                 top_table.cell(idx, 1).text = item.get("Revenue", "")
                 self._apply_font(top_table.cell(idx, 0).text_frame, size=16)
                 self._apply_font(top_table.cell(idx, 1).text_frame, size=16)
+        self._add_outliers_table(slide, analysis)
         self._add_top_products_chart(slide, analysis)
 
     def _add_self_healing_slide(
@@ -317,6 +319,8 @@ class PPTXGenerator:
             p.level = 0
             p.font.size = Pt(22)
 
+        self._add_slide_notes(slide, f"Bullets generated: {len(bullets)}")
+
     def _style_table_header(self, table) -> None:
         for col_idx in range(len(table.columns)):
             cell = table.cell(0, col_idx)
@@ -357,6 +361,7 @@ class PPTXGenerator:
             chart_data,
         ).chart
         chart.has_legend = False
+        self._add_slide_notes(slide, "Top products chart rendered.")
 
     def _add_mom_trend_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -394,6 +399,66 @@ class PPTXGenerator:
             chart_data,
         ).chart
         chart.has_legend = False
+        self._add_slide_notes(slide, f"Monthly revenue points: {len(analysis.monthly_revenue)}")
+
+    def _add_outliers_table(self, slide, analysis: AnalysisResult) -> None:
+        if not analysis.outliers:
+            return
+        table = slide.shapes.add_table(
+            rows=len(analysis.outliers) + 1,
+            cols=2,
+            left=Inches(7.2),
+            top=Inches(4.2),
+            width=Inches(5.6),
+            height=Inches(1.0),
+        ).table
+        table.cell(0, 0).text = "Outlier"
+        table.cell(0, 1).text = "Revenue"
+        self._style_table_header(table)
+        for idx, item in enumerate(analysis.outliers, start=1):
+            label = item.get("Product Category", "") or "Unspecified"
+            if len(label) > 22:
+                label = label[:19].rstrip() + "..."
+            table.cell(idx, 0).text = label
+            table.cell(idx, 1).text = item.get("Revenue", "")
+            self._apply_font(table.cell(idx, 0).text_frame, size=14)
+            self._apply_font(table.cell(idx, 1).text_frame, size=14)
+
+    def _add_data_health_badge(self, slide, analysis: AnalysisResult) -> None:
+        status = "Green"
+        color = "#4CAF50"
+        if analysis.summary.get("outlier_count", "0") != "0":
+            status = "Amber"
+            color = "#F4A261"
+        if analysis.summary.get("kpi_count", "0") == "0":
+            status = "Red"
+            color = "#E63946"
+
+        badge = slide.shapes.add_shape(
+            MSO_SHAPE.ROUNDED_RECTANGLE,
+            Inches(9.2),
+            Inches(0.55),
+            Inches(3.6),
+            Inches(0.6),
+        )
+        badge.fill.solid()
+        badge.fill.fore_color.rgb = RGBColor.from_string(color[1:])
+        badge.line.fill.background()
+        tf = badge.text_frame
+        tf.text = f"Data Health: {status}"
+        tf.paragraphs[0].font.size = Pt(14)
+        tf.paragraphs[0].font.bold = True
+        tf.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+        self._apply_font(tf, size=14, bold=True)
+
+        self._add_slide_notes(slide, f"Data health badge: {status}")
+
+    def _add_slide_notes(self, slide, note: str) -> None:
+        notes = slide.notes_slide.notes_text_frame
+        if notes.text:
+            notes.text += f"\n{note}"
+        else:
+            notes.text = note
 
     def _should_add_mapping_slide(self, mapping: MappingResult) -> bool:
         return len(mapping.mapping) > 10 or len(mapping.new_columns) > 10
