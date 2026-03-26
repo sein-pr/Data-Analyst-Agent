@@ -20,18 +20,22 @@ class InsightGenerator:
         if not self.llm_client:
             return self._fallback_bullets(analysis)
 
-        prompt = (
-            "You are an executive analyst. Based on the summary below, write 4 concise executive bullets "
-            "explaining the WHY behind the numbers (not just the what). "
-            "Return ONLY strict JSON as {\"bullets\": [\"...\"]} with exactly 4 items.\n"
-            f"KPI Summary: {analysis.kpis}\n"
-            f"Top Products: {analysis.top_products}\n"
-            f"Outliers: {analysis.outliers}\n"
-        )
-        text = self.llm_client.generate_text(prompt)
-        bullets = self._parse_bullets(text)
-        bullets = self._validate_bullets(bullets)
-        return bullets or self._fallback_bullets(analysis)
+        try:
+            prompt = (
+                "You are an executive analyst. Based on the summary below, write 4 concise executive bullets "
+                "explaining the WHY behind the numbers (not just the what). "
+                "Return ONLY strict JSON as {\"bullets\": [\"...\"]} with exactly 4 items.\n"
+                f"KPI Summary: {analysis.kpis}\n"
+                f"Top Products: {analysis.top_products}\n"
+                f"Outliers: {analysis.outliers}\n"
+            )
+            text = self.llm_client.generate_text(prompt)
+            bullets = self._parse_bullets(text)
+            bullets = self._validate_bullets(bullets)
+            return bullets or self._fallback_bullets(analysis)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("LLM insight generation failed; using fallback bullets. %s", exc)
+            return self._fallback_bullets(analysis)
 
     def _parse_bullets(self, text: str) -> List[str]:
         try:
