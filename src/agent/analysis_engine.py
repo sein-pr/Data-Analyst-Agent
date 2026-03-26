@@ -36,7 +36,7 @@ class AnalysisEngine:
             monthly = (
                 df.dropna(subset=["Date"])
                 .set_index("Date")
-                .resample("M")["Revenue"]
+                .resample("ME")["Revenue"]
                 .sum()
             )
             if len(monthly) >= 2:
