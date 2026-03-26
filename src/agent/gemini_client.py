@@ -4,6 +4,8 @@ import json
 import re
 from typing import Dict, List, Sequence
 
+from pydantic import BaseModel, ValidationError, field_validator
+
 from .logger import get_logger
 
 logger = get_logger(__name__)
@@ -46,9 +48,12 @@ class GeminiClient:
     def _parse_json_mapping(self, text: str) -> Dict[str, str]:
         parsed = self._extract_json(text)
         if isinstance(parsed, dict):
-            validated = {str(k): str(v) for k, v in parsed.items() if k and v}
-            if validated:
-                return validated
+            try:
+                model = MappingSchema.model_validate(parsed)
+                if model.mapping:
+                    return model.mapping
+            except ValidationError:
+                logger.warning("Mapping schema validation failed.")
         logger.warning("Failed to parse Gemini mapping response.")
         return {}
 
@@ -64,3 +69,23 @@ class GeminiClient:
                 return json.loads(match.group(0))
             except Exception:  # noqa: BLE001
                 return None
+
+
+class MappingSchema(BaseModel):
+    mapping: Dict[str, str] = {}
+
+    @classmethod
+    def model_validate(cls, data):  # type: ignore[override]
+        if isinstance(data, dict) and "mapping" not in data:
+            data = {"mapping": data}
+        return super().model_validate(data)
+
+    @field_validator("mapping")
+    @classmethod
+    def _clean_mapping(cls, value: Dict[str, str]):
+        cleaned = {}
+        for key, val in value.items():
+            if not key or not val:
+                continue
+            cleaned[str(key)] = str(val)
+        return cleaned

@@ -36,6 +36,7 @@ class AgentPipeline:
         self.analysis_engine = AnalysisEngine()
         self.insights = InsightGenerator(self.llm_client)
         self.emailer = EmailNotifier.from_config(config)
+        self.page_token_path = Path(config.change_page_token_path or "state/drive_page_token.txt")
 
     def _build_llm_client(self) -> Optional[GeminiClient]:
         if not self.config.gemini_api_keys:
@@ -48,6 +49,8 @@ class AgentPipeline:
             raise RuntimeError("CLEAN_DATA_DRIVE_FOLDER_ID is not set.")
         if not self.config.reports_output_drive_folder_id:
             raise RuntimeError("REPORTS_OUTPUT_DRIVE_FOLDER_ID is not set.")
+
+        self._refresh_change_page_token()
 
         registry = ProcessedRegistry(
             self.drive,
@@ -196,3 +199,11 @@ class AgentPipeline:
                 (header + line).encode("utf-8"),
                 mime_type="text/csv",
             )
+
+    def _refresh_change_page_token(self) -> None:
+        try:
+            token = self.drive.get_start_page_token()
+            self.page_token_path.parent.mkdir(parents=True, exist_ok=True)
+            self.page_token_path.write_text(token, encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to refresh Drive page token: %s", exc)

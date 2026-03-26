@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
+from pydantic import BaseModel, ValidationError, field_validator
+
 from .analysis_engine import AnalysisResult
 from .gemini_client import GeminiClient
 from .logger import get_logger
@@ -38,9 +40,11 @@ class InsightGenerator:
             data = self._extract_json(text)
         bullets = []
         if isinstance(data, dict):
-            items = data.get("bullets", [])
-            if isinstance(items, list):
-                bullets = [str(b).strip() for b in items if str(b).strip()]
+            try:
+                model = BulletsSchema.model_validate(data)
+                bullets = model.bullets
+            except ValidationError:
+                logger.warning("Bullets schema validation failed.")
         if not bullets:
             logger.warning("Failed to parse insight bullets from LLM response.")
         return bullets
@@ -50,6 +54,16 @@ class InsightGenerator:
         if len(clean) >= 4:
             return clean[:4]
         return clean
+
+
+class BulletsSchema(BaseModel):
+    bullets: List[str]
+
+    @field_validator("bullets")
+    @classmethod
+    def _clean_bullets(cls, value: List[str]) -> List[str]:
+        cleaned = [str(b).strip() for b in value if str(b).strip()]
+        return cleaned
 
     @staticmethod
     def _extract_json(text: str):
