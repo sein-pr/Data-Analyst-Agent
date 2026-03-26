@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +12,7 @@ from .brand import load_brand_guidelines
 from .config import EnvConfig
 from .data_healer import DataHealer
 from .drive_client import DriveService
+from .email_notifier import EmailNotifier
 from .gemini_client import GeminiClient
 from .insight_generator import InsightGenerator
 from .logger import get_logger
@@ -32,6 +34,7 @@ class AgentPipeline:
         self.healer = DataHealer(["Revenue", "Date", "Product Category"], llm_client=self.llm_client)
         self.analysis_engine = AnalysisEngine()
         self.insights = InsightGenerator(self.llm_client)
+        self.emailer = EmailNotifier.from_config(config)
 
     def _build_llm_client(self) -> Optional[GeminiClient]:
         if not self.config.gemini_api_keys:
@@ -60,8 +63,8 @@ class AgentPipeline:
         for file in watch_result.new_files:
             logger.info("Processing file: %s", file.name)
             try:
-                self.drive.move_file(file.id, watch_result.processing_folder_id)
-                data = self.drive.download_file(file.id)
+                self._with_retries(lambda: self.drive.move_file(file.id, watch_result.processing_folder_id))
+                data = self._with_retries(lambda: self.drive.download_file(file.id))
                 df = self._load_dataframe(file.name, data)
                 mapping = self.healer.map_columns(df.columns)
                 df = df.rename(columns=mapping.mapping)
@@ -71,20 +74,33 @@ class AgentPipeline:
                         filename=file.name,
                         message=f"Missing required columns: {', '.join(mapping.unmapped_required)}",
                     )
+                    self.emailer.send(
+                        subject=f"Data Agent: Missing columns in {file.name}",
+                        body=f"Missing required columns: {', '.join(mapping.unmapped_required)}",
+                    )
                     continue
                 analysis = self.analysis_engine.analyze(df)
                 bullets = self.insights.generate_bullets(analysis)
                 pptx_path = self._build_presentation(analysis, file.name, bullets, mapping)
                 self._upload_report(pptx_path)
-                self.drive.move_file(file.id, processed_folder_id)
+                self._write_processed_index(file.name, pptx_path.name, processed_folder_id)
+                self._with_retries(lambda: self.drive.move_file(file.id, processed_folder_id))
                 logger.info("Generated report: %s", pptx_path)
+                self.emailer.send(
+                    subject=f"Data Agent: Report ready for {file.name}",
+                    body=f"Report generated: {pptx_path.name}",
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Failed to process file %s", file.name)
                 self._upload_status(
                     filename=file.name,
                     message=f"Processing failed: {exc}",
                 )
-                self.drive.move_file(file.id, failed_folder_id)
+                self._with_retries(lambda: self.drive.move_file(file.id, failed_folder_id))
+                self.emailer.send(
+                    subject=f"Data Agent: Failed to process {file.name}",
+                    body=f"Error: {exc}",
+                )
             finally:
                 mark_processed([file.id])
 
@@ -126,5 +142,27 @@ class AgentPipeline:
             self.config.reports_output_drive_folder_id,
             status_name,
             content,
+            mime_type="text/plain",
+        )
+
+    def _with_retries(self, fn, attempts: int = 3, delay_seconds: int = 2):
+        last_exc = None
+        for attempt in range(1, attempts + 1):
+            try:
+                return fn()
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.warning("Retry %s/%s failed: %s", attempt, attempts, exc)
+                time.sleep(delay_seconds * attempt)
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("Retry helper failed with unknown error.")
+
+    def _write_processed_index(self, source_name: str, report_name: str, folder_id: str) -> None:
+        content = f"Source: {source_name}\nReport: {report_name}\n"
+        self.drive.upload_file(
+            folder_id,
+            f"{Path(source_name).stem}_processed.txt",
+            content.encode("utf-8"),
             mime_type="text/plain",
         )
