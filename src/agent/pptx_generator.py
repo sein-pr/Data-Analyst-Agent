@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import List
 
@@ -29,6 +30,8 @@ class PPTXGenerator:
         self.brand = brand
         self.logo_full_path = Path("srs/logo_large.png")
         self.logo_symbol_path = Path("srs/logo_small.png")
+        self.report_source = ""
+        self.report_date = ""
 
     def build(
         self,
@@ -36,11 +39,16 @@ class PPTXGenerator:
         output_path: Path,
         bullets: List[str],
         mapping: MappingResult,
+        report_source: str,
     ) -> Path:
+        self.report_source = report_source
+        self.report_date = datetime.utcnow().strftime("%Y-%m-%d")
         prs = Presentation()
         self._add_title_slide(prs, analysis)
         self._add_kpi_slide(prs, analysis)
         self._add_self_healing_slide(prs, analysis, mapping)
+        if self._should_add_mapping_slide(mapping):
+            self._add_mapping_detail_slide(prs, mapping)
         self._add_recommendations_slide(prs, analysis, bullets)
         self._apply_theme(prs)
 
@@ -53,6 +61,7 @@ class PPTXGenerator:
         for slide in prs.slides:
             self._set_slide_background(slide)
             self._add_footer_logo(slide)
+            self._add_footer_meta(slide)
             for shape in slide.shapes:
                 if not shape.has_text_frame:
                     continue
@@ -83,6 +92,16 @@ class PPTXGenerator:
             Inches(6.8),
             width=Inches(0.7),
         )
+
+    def _add_footer_meta(self, slide) -> None:
+        if not self.report_date:
+            return
+        meta_box = slide.shapes.add_textbox(Inches(0.6), Inches(6.9), Inches(8.0), Inches(0.4))
+        tf = meta_box.text_frame
+        tf.text = f"{self.report_date} | Source: {self.report_source}"
+        p = tf.paragraphs[0]
+        p.font.size = Pt(12)
+        p.font.color.rgb = RGBColor.from_string(self.brand.palette.primary[1:])
 
     def _add_header_bar(self, slide) -> None:
         shape = slide.shapes.add_shape(
@@ -162,6 +181,7 @@ class PPTXGenerator:
             for idx, item in enumerate(analysis.top_products, start=1):
                 top_table.cell(idx, 0).text = item.get("Product Category", "")
                 top_table.cell(idx, 1).text = item.get("Revenue", "")
+        self._add_top_products_chart(slide, analysis)
 
     def _add_self_healing_slide(
         self, prs: Presentation, analysis: AnalysisResult, mapping: MappingResult
@@ -276,3 +296,63 @@ class PPTXGenerator:
                 for run in cell.text_frame.paragraphs[0].runs:
                     run.font.color.rgb = RGBColor(255, 255, 255)
                     run.font.bold = True
+
+    def _add_top_products_chart(self, slide, analysis: AnalysisResult) -> None:
+        if not analysis.top_products:
+            return
+        try:
+            from pptx.chart.data import CategoryChartData
+            from pptx.enum.chart import XL_CHART_TYPE
+        except Exception:  # noqa: BLE001
+            return
+
+        chart_data = CategoryChartData()
+        chart_data.categories = [item.get("Product Category", "") for item in analysis.top_products]
+        values = []
+        for item in analysis.top_products:
+            raw = item.get("Revenue", "0").replace(",", "")
+            try:
+                values.append(float(raw))
+            except ValueError:
+                values.append(0.0)
+        chart_data.add_series("Revenue", values)
+
+        chart = slide.shapes.add_chart(
+            XL_CHART_TYPE.COLUMN_CLUSTERED,
+            Inches(0.6),
+            Inches(5.2),
+            Inches(12.2),
+            Inches(1.8),
+            chart_data,
+        ).chart
+        chart.has_legend = False
+
+    def _should_add_mapping_slide(self, mapping: MappingResult) -> bool:
+        return len(mapping.mapping) > 10 or len(mapping.new_columns) > 10
+
+    def _add_mapping_detail_slide(self, prs: Presentation, mapping: MappingResult) -> None:
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        self._add_header_bar(slide)
+        title_box = slide.shapes.add_textbox(Inches(0.6), Inches(0.6), Inches(10.0), Inches(0.6))
+        title_tf = title_box.text_frame
+        title_tf.text = "Schema Mapping Details"
+        title_tf.paragraphs[0].font.size = Pt(28)
+        title_tf.paragraphs[0].font.bold = True
+
+        table = slide.shapes.add_table(
+            rows=min(len(mapping.mapping) + 1, 15),
+            cols=2,
+            left=Inches(0.6),
+            top=Inches(1.6),
+            width=Inches(12.0),
+            height=Inches(4.8),
+        ).table
+        table.cell(0, 0).text = "Raw Column"
+        table.cell(0, 1).text = "Mapped To"
+        self._style_table_header(table)
+
+        for idx, (raw, target) in enumerate(mapping.mapping.items(), start=1):
+            if idx >= 15:
+                break
+            table.cell(idx, 0).text = raw
+            table.cell(idx, 1).text = target

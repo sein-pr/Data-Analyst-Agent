@@ -88,7 +88,13 @@ class AgentPipeline:
         generator = PPTXGenerator(brand)
         output_name = f"{Path(filename).stem}_report.pptx"
         output_path = Path("output") / output_name
-        return generator.build(analysis, output_path, bullets, mapping)
+        return generator.build(
+            analysis,
+            output_path,
+            bullets,
+            mapping,
+            report_source=filename,
+        )
 
     def _upload_report(self, pptx_path: Path) -> None:
         content = pptx_path.read_bytes()
