@@ -11,6 +11,7 @@ from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
 from .analysis_engine import AnalysisResult
+from .data_healer import MappingResult
 from .brand import BrandGuidelines
 from .logger import get_logger
 
@@ -29,11 +30,17 @@ class PPTXGenerator:
         self.logo_full_path = Path("srs/logo_large.png")
         self.logo_symbol_path = Path("srs/logo_small.png")
 
-    def build(self, analysis: AnalysisResult, output_path: Path, bullets: List[str]) -> Path:
+    def build(
+        self,
+        analysis: AnalysisResult,
+        output_path: Path,
+        bullets: List[str],
+        mapping: MappingResult,
+    ) -> Path:
         prs = Presentation()
         self._add_title_slide(prs, analysis)
         self._add_kpi_slide(prs, analysis)
-        self._add_self_healing_slide(prs, analysis)
+        self._add_self_healing_slide(prs, analysis, mapping)
         self._add_recommendations_slide(prs, analysis, bullets)
         self._apply_theme(prs)
 
@@ -156,7 +163,9 @@ class PPTXGenerator:
                 top_table.cell(idx, 0).text = item.get("Product Category", "")
                 top_table.cell(idx, 1).text = item.get("Revenue", "")
 
-    def _add_self_healing_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
+    def _add_self_healing_slide(
+        self, prs: Presentation, analysis: AnalysisResult, mapping: MappingResult
+    ) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
 
@@ -168,8 +177,41 @@ class PPTXGenerator:
 
         body_box = slide.shapes.add_textbox(Inches(0.6), Inches(1.6), Inches(12.0), Inches(4.5))
         body_tf = body_box.text_frame
-        body_tf.text = "New or unexpected columns were detected and normalized."
+        body_tf.text = "Schema alignment completed."
         body_tf.paragraphs[0].font.size = Pt(20)
+
+        if mapping.mapping:
+            mapping_title = body_tf.add_paragraph()
+            mapping_title.text = "Mapped Columns:"
+            mapping_title.font.size = Pt(18)
+            mapping_title.font.bold = True
+            for raw, target in mapping.mapping.items():
+                p = body_tf.add_paragraph()
+                p.text = f"{raw} → {target}"
+                p.level = 1
+                p.font.size = Pt(18)
+
+        if mapping.new_columns:
+            new_title = body_tf.add_paragraph()
+            new_title.text = "New Columns:"
+            new_title.font.size = Pt(18)
+            new_title.font.bold = True
+            for col in mapping.new_columns:
+                p = body_tf.add_paragraph()
+                p.text = col
+                p.level = 1
+                p.font.size = Pt(18)
+
+        if mapping.unmapped_required:
+            missing_title = body_tf.add_paragraph()
+            missing_title.text = "Missing Required Columns:"
+            missing_title.font.size = Pt(18)
+            missing_title.font.bold = True
+            for col in mapping.unmapped_required:
+                p = body_tf.add_paragraph()
+                p.text = col
+                p.level = 1
+                p.font.size = Pt(18)
 
     def _add_recommendations_slide(
         self, prs: Presentation, analysis: AnalysisResult, bullets: List[str]

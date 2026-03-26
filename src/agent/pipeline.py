@@ -68,7 +68,7 @@ class AgentPipeline:
                     continue
                 analysis = self.analysis_engine.analyze(df)
                 bullets = self.insights.generate_bullets(analysis)
-                pptx_path = self._build_presentation(analysis, file.name, bullets)
+                pptx_path = self._build_presentation(analysis, file.name, bullets, mapping)
                 self._upload_report(pptx_path)
                 logger.info("Generated report: %s", pptx_path)
             finally:
@@ -80,7 +80,7 @@ class AgentPipeline:
             return pd.read_csv(io.BytesIO(data))
         return pd.read_excel(io.BytesIO(data))
 
-    def _build_presentation(self, analysis, filename: str, bullets) -> Path:
+    def _build_presentation(self, analysis, filename: str, bullets, mapping) -> Path:
         brand_path = Path("srs/brand_guideline.md")
         brand = load_brand_guidelines(brand_path)
         if not brand:
@@ -88,7 +88,7 @@ class AgentPipeline:
         generator = PPTXGenerator(brand)
         output_name = f"{Path(filename).stem}_report.pptx"
         output_path = Path("output") / output_name
-        return generator.build(analysis, output_path, bullets)
+        return generator.build(analysis, output_path, bullets, mapping)
 
     def _upload_report(self, pptx_path: Path) -> None:
         content = pptx_path.read_bytes()
