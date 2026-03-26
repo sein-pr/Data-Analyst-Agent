@@ -68,7 +68,7 @@ class DriveService:
             )
             if creds.expired and creds.refresh_token:
                 logger.info("Refreshing expired OAuth token.")
-                creds.refresh(Request())
+                self._refresh_with_retries(creds)
             return creds
 
         if oauth_client_json_path:
@@ -81,6 +81,22 @@ class DriveService:
             "No valid Google credentials found. Provide service account JSON or "
             "GOOGLE_TOKEN_JSON."
         )
+
+    @staticmethod
+    def _refresh_with_retries(creds, attempts: int = 3, delay_seconds: int = 2) -> None:
+        last_exc = None
+        for attempt in range(1, attempts + 1):
+            try:
+                creds.refresh(Request())
+                return
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.warning("Token refresh failed (%s/%s): %s", attempt, attempts, exc)
+                import time
+
+                time.sleep(delay_seconds * attempt)
+        if last_exc:
+            raise last_exc
 
     def list_files(
         self,
