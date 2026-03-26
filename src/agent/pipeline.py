@@ -46,6 +46,12 @@ class AgentPipeline:
             raise RuntimeError("REPORTS_OUTPUT_DRIVE_FOLDER_ID is not set.")
 
         watch_result = watch_folder(self.drive, self.config.clean_data_drive_folder_id)
+        processed_folder_id = self.drive.find_or_create_subfolder(
+            self.config.clean_data_drive_folder_id, "processed"
+        )
+        failed_folder_id = self.drive.find_or_create_subfolder(
+            self.config.clean_data_drive_folder_id, "failed"
+        )
 
         if not watch_result.new_files:
             logger.info("No new files to process.")
@@ -70,7 +76,15 @@ class AgentPipeline:
                 bullets = self.insights.generate_bullets(analysis)
                 pptx_path = self._build_presentation(analysis, file.name, bullets, mapping)
                 self._upload_report(pptx_path)
+                self.drive.move_file(file.id, processed_folder_id)
                 logger.info("Generated report: %s", pptx_path)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Failed to process file %s", file.name)
+                self._upload_status(
+                    filename=file.name,
+                    message=f"Processing failed: {exc}",
+                )
+                self.drive.move_file(file.id, failed_folder_id)
             finally:
                 mark_processed([file.id])
 
