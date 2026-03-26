@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import Dict, List, Sequence
 
 from .logger import get_logger
@@ -29,21 +31,34 @@ class GeminiClient:
             "You are a data schema mapper. Map the raw column headers to the required schema.\n"
             f"Required columns: {', '.join(required_columns)}\n"
             f"Raw headers: {', '.join(raw_headers)}\n"
-            "Return JSON in the form {\"raw_header\": \"RequiredColumn\"}."
+            "Return ONLY strict JSON in the form {\"raw_header\": \"RequiredColumn\"}.\n"
+            "Do not include any commentary or markdown."
         )
         response = self._client.generate_content(prompt)
         text = response.text or "{}"
-        try:
-            import json
-
-            parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                return {str(k): str(v) for k, v in parsed.items()}
-        except Exception:  # noqa: BLE001
-            logger.warning("Failed to parse Gemini mapping response.")
-        return {}
+        return self._parse_json_mapping(text)
 
     def generate_text(self, prompt: str) -> str:
         self._ensure_client()
         response = self._client.generate_content(prompt)
         return response.text or ""
+
+    def _parse_json_mapping(self, text: str) -> Dict[str, str]:
+        parsed = self._extract_json(text)
+        if isinstance(parsed, dict):
+            return {str(k): str(v) for k, v in parsed.items()}
+        logger.warning("Failed to parse Gemini mapping response.")
+        return {}
+
+    @staticmethod
+    def _extract_json(text: str):
+        try:
+            return json.loads(text)
+        except Exception:  # noqa: BLE001
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if not match:
+                return None
+            try:
+                return json.loads(match.group(0))
+            except Exception:  # noqa: BLE001
+                return None

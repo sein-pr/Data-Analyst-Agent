@@ -49,6 +49,10 @@ class EnvConfig:
     mail_default_sender: Optional[str]
     notify_email_to: Optional[str]
     brand_font_primary: Optional[str]
+    processed_registry_filename: Optional[str]
+    webhook_url: Optional[str]
+    webhook_channel_id: Optional[str]
+    webhook_token: Optional[str]
 
 
 def load_config() -> EnvConfig:
@@ -73,4 +77,8 @@ def load_config() -> EnvConfig:
         mail_default_sender=os.getenv("MAIL_DEFAULT_SENDER"),
         notify_email_to=os.getenv("NOTIFY_EMAIL_TO"),
         brand_font_primary=os.getenv("BRAND_FONT_PRIMARY"),
+        processed_registry_filename=os.getenv("PROCESSED_REGISTRY_FILENAME"),
+        webhook_url=os.getenv("WEBHOOK_URL"),
+        webhook_channel_id=os.getenv("WEBHOOK_CHANNEL_ID"),
+        webhook_token=os.getenv("WEBHOOK_TOKEN"),
     )

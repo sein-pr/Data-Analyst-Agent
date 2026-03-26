@@ -6,3 +6,5 @@ google-auth
 google-auth-oauthlib
 google-generativeai
 modal
+fastapi
+uvicorn

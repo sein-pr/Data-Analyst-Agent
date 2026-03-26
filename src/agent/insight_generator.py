@@ -20,7 +20,8 @@ class InsightGenerator:
 
         prompt = (
             "You are an executive analyst. Based on the summary below, write 4 concise executive bullets "
-            "explaining the WHY behind the numbers (not just the what). Return JSON as {\"bullets\": [..]}.\n"
+            "explaining the WHY behind the numbers (not just the what). "
+            "Return ONLY strict JSON as {\"bullets\": [\"...\"]} with exactly 4 items.\n"
             f"KPI Summary: {analysis.kpis}\n"
             f"Top Products: {analysis.top_products}\n"
             f"Outliers: {analysis.outliers}\n"
@@ -32,12 +33,28 @@ class InsightGenerator:
     def _parse_bullets(self, text: str) -> List[str]:
         try:
             data = json.loads(text)
-            bullets = data.get("bullets", [])
-            if isinstance(bullets, list):
-                return [str(b).strip() for b in bullets if str(b).strip()]
         except Exception:  # noqa: BLE001
+            data = self._extract_json(text)
+        bullets = []
+        if isinstance(data, dict):
+            items = data.get("bullets", [])
+            if isinstance(items, list):
+                bullets = [str(b).strip() for b in items if str(b).strip()]
+        if not bullets:
             logger.warning("Failed to parse insight bullets from LLM response.")
-        return []
+        return bullets
+
+    @staticmethod
+    def _extract_json(text: str):
+        import re
+
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except Exception:  # noqa: BLE001
+            return None
 
     def _fallback_bullets(self, analysis: AnalysisResult) -> List[str]:
         bullets: List[str] = []

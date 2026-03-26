@@ -17,6 +17,7 @@ from .gemini_client import GeminiClient
 from .insight_generator import InsightGenerator
 from .logger import get_logger
 from .pptx_generator import PPTXGenerator
+from .processed_registry import ProcessedRegistry
 from .watcher import mark_processed, watch_folder
 
 logger = get_logger(__name__)
@@ -48,7 +49,17 @@ class AgentPipeline:
         if not self.config.reports_output_drive_folder_id:
             raise RuntimeError("REPORTS_OUTPUT_DRIVE_FOLDER_ID is not set.")
 
-        watch_result = watch_folder(self.drive, self.config.clean_data_drive_folder_id)
+        registry = ProcessedRegistry(
+            self.drive,
+            self.config.reports_output_drive_folder_id,
+            filename=self.config.processed_registry_filename or "processed_registry.json",
+        )
+        processed_ids = registry.load()
+        watch_result = watch_folder(
+            self.drive,
+            self.config.clean_data_drive_folder_id,
+            processed_ids=processed_ids,
+        )
         processed_folder_id = self.drive.find_or_create_subfolder(
             self.config.clean_data_drive_folder_id, "processed"
         )
@@ -90,6 +101,7 @@ class AgentPipeline:
                     subject=f"Data Agent: Report ready for {file.name}",
                     body=f"Report generated: {pptx_path.name}",
                 )
+                registry.add({file.id})
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Failed to process file %s", file.name)
                 self._upload_status(

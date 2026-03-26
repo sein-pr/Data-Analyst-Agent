@@ -38,9 +38,13 @@ def _save_processed_ids(ids: Iterable[str]) -> None:
 
 
 def watch_folder(
-    drive: DriveService, folder_id: str, extensions: Iterable[str] = (".xlsx", ".csv")
+    drive: DriveService,
+    folder_id: str,
+    extensions: Iterable[str] = (".xlsx", ".csv"),
+    processed_ids: set[str] | None = None,
 ) -> WatchResult:
-    processed_ids = _load_processed_ids()
+    if processed_ids is None:
+        processed_ids = _load_processed_ids()
     extension_set = {ext.lower() for ext in extensions}
     files = drive.list_files(folder_id)
     new_files = [

@@ -118,6 +118,11 @@ class DriveService:
                 break
         return results
 
+    def find_file_by_name(self, folder_id: str, name: str) -> Optional[DriveFile]:
+        query = f"name = '{name}'"
+        files = self.list_files(folder_id, query_extra=query)
+        return files[0] if files else None
+
     def find_or_create_subfolder(self, parent_id: str, name: str) -> str:
         query = (
             "mimeType = 'application/vnd.google-apps.folder' and "
@@ -164,3 +169,34 @@ class DriveService:
             .execute()
         )
         return created["id"]
+
+    def update_file_content(
+        self, file_id: str, content: bytes, mime_type: str = "application/json"
+    ) -> str:
+        media = MediaIoBaseUpload(io.BytesIO(content), mimetype=mime_type, resumable=False)
+        updated = (
+            self._service.files()
+            .update(fileId=file_id, media_body=media, fields="id")
+            .execute()
+        )
+        return updated["id"]
+
+    def get_start_page_token(self) -> str:
+        response = self._service.changes().getStartPageToken().execute()
+        return response["startPageToken"]
+
+    def watch_changes(
+        self,
+        page_token: str,
+        webhook_url: str,
+        channel_id: str,
+        token: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        body = {
+            "id": channel_id,
+            "type": "web_hook",
+            "address": webhook_url,
+        }
+        if token:
+            body["token"] = token
+        return self._service.changes().watch(pageToken=page_token, body=body).execute()
