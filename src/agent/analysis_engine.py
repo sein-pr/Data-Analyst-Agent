@@ -17,6 +17,7 @@ class AnalysisResult:
     outliers: List[Dict[str, str]]
     summary: Dict[str, str]
     monthly_revenue: List[Dict[str, str]]
+    data_quality: Dict[str, str]
 
 
 class AnalysisEngine:
@@ -69,6 +70,7 @@ class AnalysisEngine:
                         }
                     )
 
+        data_quality = self._compute_data_quality(df)
         summary = {
             "kpi_count": str(len(kpis)),
             "top_products_count": str(len(top_products)),
@@ -80,4 +82,18 @@ class AnalysisEngine:
             outliers=outliers,
             summary=summary,
             monthly_revenue=monthly_revenue,
+            data_quality=data_quality,
         )
+
+    def _compute_data_quality(self, df: pd.DataFrame) -> Dict[str, str]:
+        total_rows = len(df)
+        missing_cells = int(df.isna().sum().sum())
+        duplicate_rows = int(df.duplicated().sum())
+        missing_pct = (missing_cells / max(total_rows * max(len(df.columns), 1), 1)) * 100
+        return {
+            "rows": str(total_rows),
+            "columns": str(len(df.columns)),
+            "missing_cells": str(missing_cells),
+            "missing_pct": f"{missing_pct:.2f}%",
+            "duplicate_rows": str(duplicate_rows),
+        }
