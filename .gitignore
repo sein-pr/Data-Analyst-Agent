@@ -1,0 +1,6 @@
+.env
+.env.*
+client_secret_273794057691-i5dlmdne8m6rsdgoijd8aau2s2of0g2a.apps.googleusercontent.com.json
+*.pem
+*.key
+service_account.json
