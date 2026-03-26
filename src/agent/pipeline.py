@@ -43,7 +43,7 @@ class AgentPipeline:
         if not self.config.gemini_api_keys:
             logger.warning("No Gemini API keys found; using heuristic mapping only.")
             return None
-        return GeminiClient(self.config.gemini_api_keys[0], self.config.gemini_model)
+        return GeminiClient(self.config.gemini_api_keys, self.config.gemini_model)
 
     def run(self) -> None:
         if not self.config.clean_data_drive_folder_id:
