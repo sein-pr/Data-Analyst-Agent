@@ -16,6 +16,7 @@ class AnalysisResult:
     top_products: List[Dict[str, str]]
     outliers: List[Dict[str, str]]
     summary: Dict[str, str]
+    monthly_revenue: List[Dict[str, str]]
 
 
 class AnalysisEngine:
@@ -28,6 +29,7 @@ class AnalysisEngine:
             total_revenue = df["Revenue"].sum()
             kpis["Total Revenue"] = f"{total_revenue:,.2f}"
 
+        monthly_revenue: List[Dict[str, str]] = []
         if {"Revenue", "Date"}.issubset(df.columns):
             df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
             monthly = (
@@ -39,6 +41,10 @@ class AnalysisEngine:
             if len(monthly) >= 2:
                 mom = (monthly.iloc[-1] - monthly.iloc[-2]) / max(monthly.iloc[-2], 1)
                 kpis["MoM Growth"] = f"{mom:.2%}"
+            for ts, value in monthly.tail(12).items():
+                monthly_revenue.append(
+                    {"Month": ts.strftime("%Y-%m"), "Revenue": f"{value:,.2f}"}
+                )
 
         if {"Revenue", "Product Category"}.issubset(df.columns):
             grouped = (
@@ -73,4 +79,5 @@ class AnalysisEngine:
             top_products=top_products,
             outliers=outliers,
             summary=summary,
+            monthly_revenue=monthly_revenue,
         )

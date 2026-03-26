@@ -94,6 +94,7 @@ class AgentPipeline:
             bullets,
             mapping,
             report_source=filename,
+            primary_font=self.config.brand_font_primary,
         )
 
     def _upload_report(self, pptx_path: Path) -> None:

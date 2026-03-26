@@ -48,6 +48,7 @@ class EnvConfig:
     mail_password: Optional[str]
     mail_default_sender: Optional[str]
     notify_email_to: Optional[str]
+    brand_font_primary: Optional[str]
 
 
 def load_config() -> EnvConfig:
@@ -71,4 +72,5 @@ def load_config() -> EnvConfig:
         mail_password=os.getenv("MAIL_PASSWORD"),
         mail_default_sender=os.getenv("MAIL_DEFAULT_SENDER"),
         notify_email_to=os.getenv("NOTIFY_EMAIL_TO"),
+        brand_font_primary=os.getenv("BRAND_FONT_PRIMARY"),
     )

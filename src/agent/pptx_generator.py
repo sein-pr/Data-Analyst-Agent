@@ -32,6 +32,7 @@ class PPTXGenerator:
         self.logo_symbol_path = Path("srs/logo_small.png")
         self.report_source = ""
         self.report_date = ""
+        self.primary_font = "Calibri"
 
     def build(
         self,
@@ -40,7 +41,10 @@ class PPTXGenerator:
         bullets: List[str],
         mapping: MappingResult,
         report_source: str,
+        primary_font: str | None = None,
     ) -> Path:
+        if primary_font:
+            self.primary_font = primary_font
         self.report_source = report_source
         self.report_date = datetime.utcnow().strftime("%Y-%m-%d")
         prs = Presentation()
@@ -49,6 +53,8 @@ class PPTXGenerator:
         self._add_self_healing_slide(prs, analysis, mapping)
         if self._should_add_mapping_slide(mapping):
             self._add_mapping_detail_slide(prs, mapping)
+        if analysis.monthly_revenue:
+            self._add_mom_trend_slide(prs, analysis)
         self._add_recommendations_slide(prs, analysis, bullets)
         self._apply_theme(prs)
 
@@ -67,7 +73,7 @@ class PPTXGenerator:
                     continue
                 for paragraph in shape.text_frame.paragraphs:
                     for run in paragraph.runs:
-                        run.font.name = "Calibri"
+                        run.font.name = self.primary_font
                         try:
                             if run.font.color.rgb is None:
                                 run.font.color.rgb = RGBColor.from_string(
@@ -115,6 +121,15 @@ class PPTXGenerator:
         shape.fill.fore_color.rgb = RGBColor.from_string(self.brand.palette.primary[1:])
         shape.line.fill.background()
 
+    def _apply_font(self, text_frame, size: int | None = None, bold: bool | None = None) -> None:
+        for paragraph in text_frame.paragraphs:
+            for run in paragraph.runs:
+                run.font.name = self.primary_font
+                if size:
+                    run.font.size = Pt(size)
+                if bold is not None:
+                    run.font.bold = bold
+
     def _add_title_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
@@ -132,12 +147,14 @@ class PPTXGenerator:
         title_tf.text = f"{self.brand.name} Executive Summary"
         title_tf.paragraphs[0].font.size = Pt(42)
         title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=42, bold=True)
 
         subtitle_box = slide.shapes.add_textbox(Inches(0.6), Inches(3.2), Inches(10.5), Inches(0.8))
         subtitle_tf = subtitle_box.text_frame
         subtitle_tf.text = self.brand.tagline or "Automated Insights"
         subtitle_tf.paragraphs[0].font.size = Pt(22)
         subtitle_tf.paragraphs[0].font.color.rgb = RGBColor.from_string(self.brand.palette.secondary[1:])
+        self._apply_font(subtitle_tf, size=22)
 
     def _add_kpi_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -148,6 +165,7 @@ class PPTXGenerator:
         title_tf.text = "KPI Dashboard"
         title_tf.paragraphs[0].font.size = Pt(28)
         title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=28, bold=True)
 
         kpi_table = slide.shapes.add_table(
             rows=max(2, len(analysis.kpis) + 1),
@@ -161,9 +179,12 @@ class PPTXGenerator:
         kpi_table.cell(0, 1).text = "Value"
         self._style_table_header(kpi_table)
         row = 1
+        kpi_font_size = 18 if len(analysis.kpis) > 6 else 20
         for key, value in analysis.kpis.items():
             kpi_table.cell(row, 0).text = key
             kpi_table.cell(row, 1).text = value
+            self._apply_font(kpi_table.cell(row, 0).text_frame, size=kpi_font_size)
+            self._apply_font(kpi_table.cell(row, 1).text_frame, size=kpi_font_size)
             row += 1
 
         if analysis.top_products:
@@ -179,8 +200,13 @@ class PPTXGenerator:
             top_table.cell(0, 1).text = "Revenue"
             self._style_table_header(top_table)
             for idx, item in enumerate(analysis.top_products, start=1):
-                top_table.cell(idx, 0).text = item.get("Product Category", "")
+                category = item.get("Product Category", "")
+                if len(category) > 28:
+                    category = category[:25].rstrip() + "..."
+                top_table.cell(idx, 0).text = category
                 top_table.cell(idx, 1).text = item.get("Revenue", "")
+                self._apply_font(top_table.cell(idx, 0).text_frame, size=16)
+                self._apply_font(top_table.cell(idx, 1).text_frame, size=16)
         self._add_top_products_chart(slide, analysis)
 
     def _add_self_healing_slide(
@@ -194,6 +220,7 @@ class PPTXGenerator:
         title_tf.text = "Self-Healing Report"
         title_tf.paragraphs[0].font.size = Pt(28)
         title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=28, bold=True)
 
         self._add_schema_summary_table(slide, mapping)
 
@@ -201,6 +228,7 @@ class PPTXGenerator:
         body_tf = body_box.text_frame
         body_tf.text = "Schema alignment completed."
         body_tf.paragraphs[0].font.size = Pt(20)
+        self._apply_font(body_tf, size=20)
 
         if mapping.mapping:
             mapping_title = body_tf.add_paragraph()
@@ -268,6 +296,7 @@ class PPTXGenerator:
         title_tf.text = "Recommendations"
         title_tf.paragraphs[0].font.size = Pt(28)
         title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=28, bold=True)
 
         left = Inches(0.9)
         top = Inches(1.6)
@@ -281,6 +310,7 @@ class PPTXGenerator:
         tf.text = bullets[0]
         tf.paragraphs[0].font.size = Pt(22)
         tf.paragraphs[0].alignment = PP_ALIGN.LEFT
+        self._apply_font(tf, size=22)
         for bullet in bullets[1:]:
             p = tf.add_paragraph()
             p.text = bullet
@@ -296,6 +326,7 @@ class PPTXGenerator:
                 for run in cell.text_frame.paragraphs[0].runs:
                     run.font.color.rgb = RGBColor(255, 255, 255)
                     run.font.bold = True
+                    run.font.name = self.primary_font
 
     def _add_top_products_chart(self, slide, analysis: AnalysisResult) -> None:
         if not analysis.top_products:
@@ -327,6 +358,43 @@ class PPTXGenerator:
         ).chart
         chart.has_legend = False
 
+    def _add_mom_trend_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        self._add_header_bar(slide)
+        title_box = slide.shapes.add_textbox(Inches(0.6), Inches(0.6), Inches(10.0), Inches(0.6))
+        title_tf = title_box.text_frame
+        title_tf.text = "Revenue Trend (Monthly)"
+        title_tf.paragraphs[0].font.size = Pt(28)
+        title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=28, bold=True)
+
+        try:
+            from pptx.chart.data import CategoryChartData
+            from pptx.enum.chart import XL_CHART_TYPE
+        except Exception:  # noqa: BLE001
+            return
+
+        chart_data = CategoryChartData()
+        chart_data.categories = [item["Month"] for item in analysis.monthly_revenue]
+        values = []
+        for item in analysis.monthly_revenue:
+            raw = item["Revenue"].replace(",", "")
+            try:
+                values.append(float(raw))
+            except ValueError:
+                values.append(0.0)
+        chart_data.add_series("Revenue", values)
+
+        chart = slide.shapes.add_chart(
+            XL_CHART_TYPE.LINE,
+            Inches(0.6),
+            Inches(1.6),
+            Inches(12.2),
+            Inches(4.8),
+            chart_data,
+        ).chart
+        chart.has_legend = False
+
     def _should_add_mapping_slide(self, mapping: MappingResult) -> bool:
         return len(mapping.mapping) > 10 or len(mapping.new_columns) > 10
 
@@ -338,6 +406,7 @@ class PPTXGenerator:
         title_tf.text = "Schema Mapping Details"
         title_tf.paragraphs[0].font.size = Pt(28)
         title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=28, bold=True)
 
         table = slide.shapes.add_table(
             rows=min(len(mapping.mapping) + 1, 15),
@@ -354,5 +423,9 @@ class PPTXGenerator:
         for idx, (raw, target) in enumerate(mapping.mapping.items(), start=1):
             if idx >= 15:
                 break
-            table.cell(idx, 0).text = raw
-            table.cell(idx, 1).text = target
+            raw_label = raw if len(raw) <= 40 else raw[:37].rstrip() + "..."
+            target_label = target if len(target) <= 40 else target[:37].rstrip() + "..."
+            table.cell(idx, 0).text = raw_label
+            table.cell(idx, 1).text = target_label
+            self._apply_font(table.cell(idx, 0).text_frame, size=16)
+            self._apply_font(table.cell(idx, 1).text_frame, size=16)
