@@ -28,6 +28,7 @@ class InsightGenerator:
         )
         text = self.llm_client.generate_text(prompt)
         bullets = self._parse_bullets(text)
+        bullets = self._validate_bullets(bullets)
         return bullets or self._fallback_bullets(analysis)
 
     def _parse_bullets(self, text: str) -> List[str]:
@@ -43,6 +44,12 @@ class InsightGenerator:
         if not bullets:
             logger.warning("Failed to parse insight bullets from LLM response.")
         return bullets
+
+    def _validate_bullets(self, bullets: List[str]) -> List[str]:
+        clean = [b.strip() for b in bullets if b and isinstance(b, str)]
+        if len(clean) >= 4:
+            return clean[:4]
+        return clean
 
     @staticmethod
     def _extract_json(text: str):

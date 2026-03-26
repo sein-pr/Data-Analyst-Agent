@@ -46,7 +46,9 @@ class GeminiClient:
     def _parse_json_mapping(self, text: str) -> Dict[str, str]:
         parsed = self._extract_json(text)
         if isinstance(parsed, dict):
-            return {str(k): str(v) for k, v in parsed.items()}
+            validated = {str(k): str(v) for k, v in parsed.items() if k and v}
+            if validated:
+                return validated
         logger.warning("Failed to parse Gemini mapping response.")
         return {}
 

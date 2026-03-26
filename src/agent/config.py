@@ -53,6 +53,7 @@ class EnvConfig:
     webhook_url: Optional[str]
     webhook_channel_id: Optional[str]
     webhook_token: Optional[str]
+    change_page_token_path: Optional[str]
 
 
 def load_config() -> EnvConfig:
@@ -81,4 +82,5 @@ def load_config() -> EnvConfig:
         webhook_url=os.getenv("WEBHOOK_URL"),
         webhook_channel_id=os.getenv("WEBHOOK_CHANNEL_ID"),
         webhook_token=os.getenv("WEBHOOK_TOKEN"),
+        change_page_token_path=os.getenv("CHANGE_PAGE_TOKEN_PATH"),
     )

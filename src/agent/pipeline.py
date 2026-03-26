@@ -95,6 +95,7 @@ class AgentPipeline:
                 pptx_path = self._build_presentation(analysis, file.name, bullets, mapping)
                 self._upload_report(pptx_path)
                 self._write_processed_index(file.name, pptx_path.name, processed_folder_id)
+                self._append_audit_log(file.name, pptx_path.name)
                 self._with_retries(lambda: self.drive.move_file(file.id, processed_folder_id))
                 logger.info("Generated report: %s", pptx_path)
                 self.emailer.send(
@@ -178,3 +179,20 @@ class AgentPipeline:
             content.encode("utf-8"),
             mime_type="text/plain",
         )
+
+    def _append_audit_log(self, source_name: str, report_name: str) -> None:
+        log_name = "processed_audit_log.csv"
+        header = "timestamp,source_file,report_file\n"
+        line = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())},{source_name},{report_name}\n"
+        existing = self.drive.find_file_by_name(self.config.reports_output_drive_folder_id, log_name)
+        if existing:
+            current = self.drive.download_file(existing.id).decode("utf-8")
+            updated = current + line
+            self.drive.update_file_content(existing.id, updated.encode("utf-8"), mime_type="text/csv")
+        else:
+            self.drive.upload_file(
+                self.config.reports_output_drive_folder_id,
+                log_name,
+                (header + line).encode("utf-8"),
+                mime_type="text/csv",
+            )

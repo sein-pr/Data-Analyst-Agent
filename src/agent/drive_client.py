@@ -200,3 +200,6 @@ class DriveService:
         if token:
             body["token"] = token
         return self._service.changes().watch(pageToken=page_token, body=body).execute()
+
+    def list_changes(self, page_token: str) -> Dict[str, Any]:
+        return self._service.changes().list(pageToken=page_token, fields="newStartPageToken, changes(fileId, file(name, mimeType, parents), time)").execute()
