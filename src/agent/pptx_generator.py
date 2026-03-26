@@ -25,12 +25,12 @@ class PPTXGenerator:
     def __init__(self, brand: BrandGuidelines) -> None:
         self.brand = brand
 
-    def build(self, analysis: AnalysisResult, output_path: Path) -> Path:
+    def build(self, analysis: AnalysisResult, output_path: Path, bullets: List[str]) -> Path:
         prs = Presentation()
         self._add_title_slide(prs, analysis)
         self._add_kpi_slide(prs, analysis)
         self._add_self_healing_slide(prs, analysis)
-        self._add_recommendations_slide(prs, analysis)
+        self._add_recommendations_slide(prs, analysis, bullets)
         self._apply_theme(prs)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,9 @@ class PPTXGenerator:
         tf = tx_box.text_frame
         tf.text = "New or unexpected columns were detected and normalized."
 
-    def _add_recommendations_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
+    def _add_recommendations_slide(
+        self, prs: Presentation, analysis: AnalysisResult, bullets: List[str]
+    ) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[5])
         slide.shapes.title.text = "Recommendations"
         left = Inches(0.8)
@@ -91,4 +93,10 @@ class PPTXGenerator:
         height = Inches(3.5)
         tx_box = slide.shapes.add_textbox(left, top, width, height)
         tf = tx_box.text_frame
-        tf.text = "Review top-performing categories and investigate outliers."
+        if not bullets:
+            bullets = ["Review top-performing categories and investigate outliers."]
+        tf.text = bullets[0]
+        for bullet in bullets[1:]:
+            p = tf.add_paragraph()
+            p.text = bullet
+            p.level = 0

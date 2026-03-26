@@ -12,6 +12,7 @@ from .config import EnvConfig
 from .data_healer import DataHealer
 from .drive_client import DriveService
 from .gemini_client import GeminiClient
+from .insight_generator import InsightGenerator
 from .logger import get_logger
 from .pptx_generator import PPTXGenerator
 from .watcher import mark_processed, watch_folder
@@ -30,6 +31,7 @@ class AgentPipeline:
         self.llm_client = self._build_llm_client()
         self.healer = DataHealer(["Revenue", "Date", "Product Category"], llm_client=self.llm_client)
         self.analysis_engine = AnalysisEngine()
+        self.insights = InsightGenerator(self.llm_client)
 
     def _build_llm_client(self) -> Optional[GeminiClient]:
         if not self.config.gemini_api_keys:
@@ -65,7 +67,8 @@ class AgentPipeline:
                     )
                     continue
                 analysis = self.analysis_engine.analyze(df)
-                pptx_path = self._build_presentation(analysis, file.name)
+                bullets = self.insights.generate_bullets(analysis)
+                pptx_path = self._build_presentation(analysis, file.name, bullets)
                 self._upload_report(pptx_path)
                 logger.info("Generated report: %s", pptx_path)
             finally:
@@ -77,7 +80,7 @@ class AgentPipeline:
             return pd.read_csv(io.BytesIO(data))
         return pd.read_excel(io.BytesIO(data))
 
-    def _build_presentation(self, analysis, filename: str) -> Path:
+    def _build_presentation(self, analysis, filename: str, bullets) -> Path:
         brand_path = Path("srs/brand_guideline.md")
         brand = load_brand_guidelines(brand_path)
         if not brand:
@@ -85,7 +88,7 @@ class AgentPipeline:
         generator = PPTXGenerator(brand)
         output_name = f"{Path(filename).stem}_report.pptx"
         output_path = Path("output") / output_name
-        return generator.build(analysis, output_path)
+        return generator.build(analysis, output_path, bullets)
 
     def _upload_report(self, pptx_path: Path) -> None:
         content = pptx_path.read_bytes()

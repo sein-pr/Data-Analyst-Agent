@@ -15,6 +15,7 @@ class AnalysisResult:
     kpis: Dict[str, str]
     top_products: List[Dict[str, str]]
     outliers: List[Dict[str, str]]
+    summary: Dict[str, str]
 
 
 class AnalysisEngine:
@@ -62,4 +63,14 @@ class AnalysisEngine:
                         }
                     )
 
-        return AnalysisResult(kpis=kpis, top_products=top_products, outliers=outliers)
+        summary = {
+            "kpi_count": str(len(kpis)),
+            "top_products_count": str(len(top_products)),
+            "outlier_count": str(len(outliers)),
+        }
+        return AnalysisResult(
+            kpis=kpis,
+            top_products=top_products,
+            outliers=outliers,
+            summary=summary,
+        )

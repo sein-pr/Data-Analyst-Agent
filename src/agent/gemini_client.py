@@ -42,3 +42,8 @@ class GeminiClient:
         except Exception:  # noqa: BLE001
             logger.warning("Failed to parse Gemini mapping response.")
         return {}
+
+    def generate_text(self, prompt: str) -> str:
+        self._ensure_client()
+        response = self._client.generate_content(prompt)
+        return response.text or ""
