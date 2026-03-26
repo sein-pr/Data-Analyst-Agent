@@ -26,10 +26,15 @@ class SlideContent:
 
 
 class PPTXGenerator:
-    def __init__(self, brand: BrandGuidelines) -> None:
+    def __init__(
+        self,
+        brand: BrandGuidelines,
+        logo_full_path: Path | None = None,
+        logo_symbol_path: Path | None = None,
+    ) -> None:
         self.brand = brand
-        self.logo_full_path = Path("srs/logo_large.png")
-        self.logo_symbol_path = Path("srs/logo_small.png")
+        self.logo_full_path = logo_full_path
+        self.logo_symbol_path = logo_symbol_path
         self.report_source = ""
         self.report_date = ""
         self.primary_font = "Calibri"
@@ -93,7 +98,7 @@ class PPTXGenerator:
         fill.fore_color.rgb = RGBColor.from_string(self.brand.palette.neutral[1:])
 
     def _add_footer_logo(self, slide) -> None:
-        if not self.logo_symbol_path.exists():
+        if not self.logo_symbol_path or not self.logo_symbol_path.exists():
             return
         slide.shapes.add_picture(
             str(self.logo_symbol_path),
@@ -113,7 +118,7 @@ class PPTXGenerator:
         p.font.color.rgb = RGBColor.from_string(self.brand.palette.primary[1:])
 
     def _add_logo_watermark(self, slide) -> None:
-        if not self.logo_symbol_path.exists():
+        if not self.logo_symbol_path or not self.logo_symbol_path.exists():
             return
         slide.shapes.add_picture(
             str(self.logo_symbol_path),
@@ -147,7 +152,7 @@ class PPTXGenerator:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
 
-        if self.logo_full_path.exists():
+        if self.logo_full_path and self.logo_full_path.exists():
             slide.shapes.add_picture(
                 str(self.logo_full_path),
                 Inches(0.6),

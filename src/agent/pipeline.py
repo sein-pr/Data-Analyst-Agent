@@ -8,7 +8,8 @@ from typing import Optional
 import pandas as pd
 
 from .analysis_engine import AnalysisEngine
-from .brand import load_brand_guidelines
+from .brand import load_or_default_brand
+from .brand_assets import fetch_brand_assets, parse_drive_folder_id
 from .config import EnvConfig
 from .data_healer import DataHealer
 from .drive_client import DriveService
@@ -127,11 +128,17 @@ class AgentPipeline:
         return pd.read_excel(io.BytesIO(data))
 
     def _build_presentation(self, analysis, filename: str, bullets, mapping) -> Path:
-        brand_path = Path("srs/brand_guideline.md")
-        brand = load_brand_guidelines(brand_path)
-        if not brand:
-            raise RuntimeError("Brand guidelines missing; cannot render PPTX.")
-        generator = PPTXGenerator(brand)
+        assets = fetch_brand_assets(
+            self.drive,
+            parse_drive_folder_id(self.config.brand_assets_drive_folder_url),
+            Path("state/brand_assets"),
+        )
+        brand = load_or_default_brand(assets.guideline_path)
+        generator = PPTXGenerator(
+            brand,
+            logo_full_path=assets.logo_full_path,
+            logo_symbol_path=assets.logo_symbol_path,
+        )
         output_name = f"{Path(filename).stem}_report.pptx"
         output_path = Path("output") / output_name
         return generator.build(

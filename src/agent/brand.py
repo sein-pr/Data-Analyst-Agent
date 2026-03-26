@@ -44,3 +44,16 @@ def load_brand_guidelines(path: Path) -> Optional[BrandGuidelines]:
         tagline=tagline,
         palette=BrandPalette(primary=colors[0], secondary=colors[1], neutral=colors[2]),
     )
+
+
+def load_or_default_brand(path: Optional[Path]) -> BrandGuidelines:
+    if path:
+        guidelines = load_brand_guidelines(path)
+        if guidelines:
+            return guidelines
+    logger.warning("Using default brand guidelines.")
+    return BrandGuidelines(
+        name="Brand",
+        tagline="Automated Insights",
+        palette=BrandPalette(primary="#006D77", secondary="#83C5BE", neutral="#EDF6F9"),
+    )
