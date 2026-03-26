@@ -79,6 +79,8 @@ class GeminiClient:
             "resource_exhausted",
             "429",
             "too many requests",
+            "expired",
+            "invalid",
         ]
         return any(token in text for token in indicators)
 

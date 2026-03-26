@@ -28,9 +28,12 @@ class DataHealer:
 
         if unmapped and self.llm_client:
             logger.info("Attempting LLM-based column mapping for: %s", unmapped)
-            llm_mapping = self.llm_client.map_columns(self.required_columns, raw_headers_list)
-            mapping.update(llm_mapping)
-            unmapped = [col for col in self.required_columns if col not in mapping.values()]
+            try:
+                llm_mapping = self.llm_client.map_columns(self.required_columns, raw_headers_list)
+                mapping.update(llm_mapping)
+                unmapped = [col for col in self.required_columns if col not in mapping.values()]
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("LLM mapping failed; using heuristic mapping only. %s", exc)
 
         new_columns = [col for col in raw_headers_list if col not in mapping.keys()]
         return MappingResult(mapping=mapping, unmapped_required=unmapped, new_columns=new_columns)
