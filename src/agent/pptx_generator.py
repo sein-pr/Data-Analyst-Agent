@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import io
 from typing import List
 
 from pptx import Presentation
@@ -15,6 +16,7 @@ from .analysis_engine import AnalysisResult
 from .data_healer import MappingResult
 from .brand import BrandGuidelines
 from .logger import get_logger
+from .quickchart_client import QuickChartClient
 
 logger = get_logger(__name__)
 
@@ -38,6 +40,7 @@ class PPTXGenerator:
         self.report_source = ""
         self.report_date = ""
         self.primary_font = "Calibri"
+        self.quickchart = QuickChartClient()
 
     def build(
         self,
@@ -428,14 +431,7 @@ class PPTXGenerator:
     def _add_top_products_chart(self, slide, analysis: AnalysisResult) -> None:
         if not analysis.top_products:
             return
-        try:
-            from pptx.chart.data import CategoryChartData
-            from pptx.enum.chart import XL_CHART_TYPE
-        except Exception:  # noqa: BLE001
-            return
-
-        chart_data = CategoryChartData()
-        chart_data.categories = [item.get("Product Category", "") for item in analysis.top_products]
+        labels = [item.get("Product Category", "") for item in analysis.top_products]
         values = []
         for item in analysis.top_products:
             raw = item.get("Revenue", "0").replace(",", "")
@@ -443,8 +439,49 @@ class PPTXGenerator:
                 values.append(float(raw))
             except ValueError:
                 values.append(0.0)
-        chart_data.add_series("Revenue", values)
 
+        chart_config = {
+            "type": "bar",
+            "data": {
+                "labels": labels,
+                "datasets": [
+                    {
+                        "label": "Revenue",
+                        "data": values,
+                        "backgroundColor": self.brand.palette.secondary,
+                        "borderColor": self.brand.palette.primary,
+                        "borderWidth": 1,
+                    }
+                ],
+            },
+            "options": {
+                "plugins": {"legend": {"display": False}},
+                "scales": {"x": {"ticks": {"autoSkip": False}}},
+            },
+        }
+
+        image = self.quickchart.render_chart(chart_config, width=1200, height=220, background=self.brand.palette.neutral)
+        if image:
+            slide.shapes.add_picture(
+                io.BytesIO(image),
+                Inches(0.6),
+                Inches(5.2),
+                width=Inches(12.2),
+                height=Inches(1.8),
+            )
+            self._add_slide_notes(slide, "Top products chart rendered (QuickChart).")
+            return
+
+        # Fallback to built-in chart if QuickChart fails
+        try:
+            from pptx.chart.data import CategoryChartData
+            from pptx.enum.chart import XL_CHART_TYPE
+        except Exception:  # noqa: BLE001
+            return
+
+        chart_data = CategoryChartData()
+        chart_data.categories = labels
+        chart_data.add_series("Revenue", values)
         chart = slide.shapes.add_chart(
             XL_CHART_TYPE.COLUMN_CLUSTERED,
             Inches(0.6),
@@ -466,14 +503,7 @@ class PPTXGenerator:
         title_tf.paragraphs[0].font.bold = True
         self._apply_font(title_tf, size=28, bold=True)
 
-        try:
-            from pptx.chart.data import CategoryChartData
-            from pptx.enum.chart import XL_CHART_TYPE
-        except Exception:  # noqa: BLE001
-            return
-
-        chart_data = CategoryChartData()
-        chart_data.categories = [item["Month"] for item in analysis.monthly_revenue]
+        labels = [item["Month"] for item in analysis.monthly_revenue]
         values = []
         for item in analysis.monthly_revenue:
             raw = item["Revenue"].replace(",", "")
@@ -481,8 +511,46 @@ class PPTXGenerator:
                 values.append(float(raw))
             except ValueError:
                 values.append(0.0)
-        chart_data.add_series("Revenue", values)
 
+        chart_config = {
+            "type": "line",
+            "data": {
+                "labels": labels,
+                "datasets": [
+                    {
+                        "label": "Revenue",
+                        "data": values,
+                        "borderColor": self.brand.palette.primary,
+                        "backgroundColor": self.brand.palette.secondary,
+                        "fill": False,
+                        "tension": 0.2,
+                    }
+                ],
+            },
+            "options": {"plugins": {"legend": {"display": False}}},
+        }
+
+        image = self.quickchart.render_chart(chart_config, width=1200, height=480, background=self.brand.palette.neutral)
+        if image:
+            slide.shapes.add_picture(
+                io.BytesIO(image),
+                Inches(0.6),
+                Inches(1.6),
+                width=Inches(12.2),
+                height=Inches(4.8),
+            )
+            self._add_slide_notes(slide, f"Monthly revenue points: {len(analysis.monthly_revenue)} (QuickChart)")
+            return
+
+        try:
+            from pptx.chart.data import CategoryChartData
+            from pptx.enum.chart import XL_CHART_TYPE
+        except Exception:  # noqa: BLE001
+            return
+
+        chart_data = CategoryChartData()
+        chart_data.categories = labels
+        chart_data.add_series("Revenue", values)
         chart = slide.shapes.add_chart(
             XL_CHART_TYPE.LINE,
             Inches(0.6),
