@@ -68,7 +68,7 @@ def load_config() -> EnvConfig:
         gemini_api_keys=_get_env_list("GEMINI_API_KEY_"),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
         groq_api_keys=_get_env_list("GROQ_API_KEY_") + _get_env_list("GROK_API_KEY_"),
-        groq_model=os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile"),
+        groq_model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
         modal_token_id=os.getenv("MODAL_TOKEN_ID"),
         modal_token_secret=os.getenv("MODAL_TOKEN_SECRET"),
         google_oauth_client_json_path=os.getenv("GOOGLE_OAUTH_CLIENT_JSON_PATH"),
