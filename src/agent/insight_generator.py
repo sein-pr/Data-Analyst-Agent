@@ -59,16 +59,6 @@ class InsightGenerator:
             return clean[:4]
         return clean
 
-
-class BulletsSchema(BaseModel):
-    bullets: List[str]
-
-    @field_validator("bullets")
-    @classmethod
-    def _clean_bullets(cls, value: List[str]) -> List[str]:
-        cleaned = [str(b).strip() for b in value if str(b).strip()]
-        return cleaned
-
     @staticmethod
     def _extract_json(text: str):
         import re
@@ -92,3 +82,13 @@ class BulletsSchema(BaseModel):
         if not bullets:
             bullets.append("Data indicates stable performance with no major anomalies detected.")
         return bullets[:4]
+
+
+class BulletsSchema(BaseModel):
+    bullets: List[str]
+
+    @field_validator("bullets")
+    @classmethod
+    def _clean_bullets(cls, value: List[str]) -> List[str]:
+        cleaned = [str(b).strip() for b in value if str(b).strip()]
+        return cleaned
