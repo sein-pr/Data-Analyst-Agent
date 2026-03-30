@@ -71,6 +71,20 @@ class AgentPipeline:
             self.config.clean_data_drive_folder_id, "failed"
         )
 
+        if not watch_result.new_files and self.config.retry_failed_on_empty:
+            failed_candidates = self.drive.list_files(failed_folder_id)
+            retry_files = [
+                file
+                for file in failed_candidates
+                if Path(file.name).suffix.lower() in {".xlsx", ".csv"}
+            ]
+            if retry_files:
+                logger.info("No new files in root; retrying from failed folder.")
+                watch_result = watch_result.__class__(
+                    new_files=[retry_files[0]],
+                    processing_folder_id=watch_result.processing_folder_id,
+                )
+
         if not watch_result.new_files:
             logger.info("No new files to process.")
             return

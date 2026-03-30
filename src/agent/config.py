@@ -54,6 +54,7 @@ class EnvConfig:
     webhook_channel_id: Optional[str]
     webhook_token: Optional[str]
     change_page_token_path: Optional[str]
+    retry_failed_on_empty: Optional[bool]
 
 
 def load_config() -> EnvConfig:
@@ -83,4 +84,5 @@ def load_config() -> EnvConfig:
         webhook_channel_id=os.getenv("WEBHOOK_CHANNEL_ID"),
         webhook_token=os.getenv("WEBHOOK_TOKEN"),
         change_page_token_path=os.getenv("CHANGE_PAGE_TOKEN_PATH"),
+        retry_failed_on_empty=os.getenv("RETRY_FAILED_ON_EMPTY", "true").lower() == "true",
     )
