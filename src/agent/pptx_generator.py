@@ -53,6 +53,8 @@ class PPTXGenerator:
         self.report_source = report_source
         self.report_date = datetime.utcnow().strftime("%Y-%m-%d")
         prs = Presentation()
+        prs.slide_width = Inches(10)
+        prs.slide_height = Inches(7.5)
         self._add_title_slide(prs, analysis)
         self._add_kpi_summary_slide(prs, bullets)
         self._add_kpi_slide(prs, analysis)

@@ -29,6 +29,10 @@ def _get_env_list(prefix: str, max_items: int = 10) -> List[str]:
 class EnvConfig:
     gemini_api_keys: List[str]
     gemini_model: str
+    groq_api_keys: List[str]
+    groq_model: str
+    groq_api_keys: List[str]
+    groq_model: str
 
     modal_token_id: Optional[str]
     modal_token_secret: Optional[str]
@@ -63,6 +67,8 @@ def load_config() -> EnvConfig:
     return EnvConfig(
         gemini_api_keys=_get_env_list("GEMINI_API_KEY_"),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+        groq_api_keys=_get_env_list("GROQ_API_KEY_") + _get_env_list("GROK_API_KEY_"),
+        groq_model=os.getenv("GROQ_MODEL", "llama3-70b-8192"),
         modal_token_id=os.getenv("MODAL_TOKEN_ID"),
         modal_token_secret=os.getenv("MODAL_TOKEN_SECRET"),
         google_oauth_client_json_path=os.getenv("GOOGLE_OAUTH_CLIENT_JSON_PATH"),

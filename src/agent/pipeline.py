@@ -15,6 +15,8 @@ from .data_healer import DataHealer
 from .drive_client import DriveService
 from .email_notifier import EmailNotifier
 from .gemini_client import GeminiClient
+from .groq_client import GroqClient
+from .llm_router import LLMRouter
 from .insight_generator import InsightGenerator
 from .logger import get_logger
 from .pptx_generator import PPTXGenerator
@@ -40,10 +42,15 @@ class AgentPipeline:
         self.page_token_path = Path(config.change_page_token_path or "state/drive_page_token.txt")
 
     def _build_llm_client(self) -> Optional[GeminiClient]:
-        if not self.config.gemini_api_keys:
-            logger.warning("No Gemini API keys found; using heuristic mapping only.")
+        clients = []
+        if self.config.gemini_api_keys:
+            clients.append(GeminiClient(self.config.gemini_api_keys, self.config.gemini_model))
+        if self.config.groq_api_keys:
+            clients.append(GroqClient(self.config.groq_api_keys, self.config.groq_model))
+        if not clients:
+            logger.warning("No LLM API keys found; using heuristic mapping only.")
             return None
-        return GeminiClient(self.config.gemini_api_keys, self.config.gemini_model)
+        return LLMRouter(clients)
 
     def run(self) -> None:
         if not self.config.clean_data_drive_folder_id:

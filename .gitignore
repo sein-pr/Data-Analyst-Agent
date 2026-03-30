@@ -4,3 +4,6 @@ client_secret_273794057691-i5dlmdne8m6rsdgoijd8aau2s2of0g2a.apps.googleuserconte
 *.pem
 *.key
 service_account.json
+__pycache__/
+output/
+state/
