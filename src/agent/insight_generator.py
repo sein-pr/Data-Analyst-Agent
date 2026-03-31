@@ -22,20 +22,37 @@ class InsightGenerator:
 
         try:
             prompt = (
-                "You are an executive analyst. Based on the summary below, write 3-5 concise executive bullets "
-                "explaining the WHY behind the numbers (not just the what). "
-                "Each bullet must be a single short sentence (max 20 words). "
-                "Return ONLY strict JSON as {\"bullets\": [\"...\"]}.\n"
-                "Also include 3 short, actionable recommendations under \"recommendations\".\n"
-                f"KPI Summary: {analysis.kpis}\n"
-                f"Top Products: {analysis.top_products}\n"
-                f"Outliers: {analysis.outliers}\n"
+                "You are an executive analyst tasked with analyzing KPI data and identifying causal drivers of performance.\n\n"
+                "## Your Task\n"
+                "Analyze the provided KPI summary, top products, and outliers to identify root causes and patterns—not "
+                "descriptive summaries of what happened. Your analysis should reveal the WHY behind performance movements.\n\n"
+                "## Audience & Tone\n"
+                "Your audience includes C-suite executives, board members, domain experts (VP/Director level), investors, "
+                "and cross-functional leadership. Use a confident, action-oriented tone that signals clarity and readiness "
+                "to act. Avoid hedging language; be direct about causal relationships.\n\n"
+                "## Deliverable Requirements\n"
+                "Bullets:\n"
+                "- Each bullet must be a single sentence, maximum 50 words\n"
+                "- Focus exclusively on causal analysis: root drivers, interconnected factors, or systemic patterns that explain performance\n"
+                "- Avoid restating metrics; instead, explain what's driving the numbers\n"
+                "- Prioritize the most material insights first\n\n"
+                "Recommendations (exactly 3):\n"
+                "- Short, specific, and directly actionable based on your bullets\n"
+                "- Each should address a key finding and suggest concrete next steps\n"
+                "- Assume the reader will act on these immediately\n\n"
+                "## Input Data\n"
+                f"- KPI Summary: {analysis.kpis}\n"
+                f"- Top Products: {analysis.top_products}\n"
+                f"- Outliers: {analysis.outliers}\n\n"
+                "## Output Format (Strict JSON Only)\n"
+                "{\"bullets\": [\"bullet 1\", \"bullet 2\", \"bullet 3\"], \"recommendations\": [\"recommendation 1\", \"recommendation 2\", \"recommendation 3\"]}\n\n"
+                "Return ONLY valid JSON. No preamble, explanation, or additional text."
             )
             text = self.llm_client.generate_text(prompt)
             bullets, recommendations = self._parse_bullets(text)
             bullets = self._validate_bullets(bullets)
             if recommendations:
-                return bullets + recommendations
+                return bullets + [f"Rec: {r}" for r in recommendations]
             return bullets or self._fallback_bullets(analysis)
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM insight generation failed; using fallback bullets. %s", exc)
@@ -66,8 +83,8 @@ class InsightGenerator:
                 continue
             text = bullet.strip().replace("\n", " ")
             words = text.split()
-            if len(words) > 20:
-                text = " ".join(words[:20]).rstrip() + "..."
+            if len(words) > 50:
+                text = " ".join(words[:50]).rstrip() + "..."
             clean.append(text)
         if len(clean) > 5:
             return clean[:5]
