@@ -17,7 +17,7 @@ from .email_notifier import EmailNotifier
 from .gemini_client import GeminiClient
 from .groq_client import GroqClient
 from .llm_router import LLMRouter
-from .insight_engine import InsightEngine
+from .insight_generator import InsightGenerator
 from .logger import get_logger
 from .pptx_generator import PPTXGenerator
 from .processed_registry import ProcessedRegistry
@@ -37,7 +37,7 @@ class AgentPipeline:
         self.llm_client = self._build_llm_client()
         self.healer = DataHealer(["Revenue", "Date", "Product Category"], llm_client=self.llm_client)
         self.analysis_engine = AnalysisEngine()
-        self.insight_engine = InsightEngine()
+        self.insights = InsightGenerator(self.llm_client)
         self.emailer = EmailNotifier.from_config(config)
         self.page_token_path = Path(config.change_page_token_path or "state/drive_page_token.txt")
 
@@ -117,13 +117,11 @@ class AgentPipeline:
                     )
                     continue
                 analysis = self.analysis_engine.analyze(df)
-                insights = self.insight_engine.generate_insights(df, analysis)
-                visualizations = self.insight_engine.suggest_visualizations(df, analysis)
+                bullets = self.insights.generate_bullets(analysis)
                 pptx_path = self._build_presentation(
                     analysis,
                     file.name,
-                    insights,
-                    visualizations,
+                    bullets,
                     mapping,
                 )
                 self._upload_report(pptx_path)
@@ -156,7 +154,7 @@ class AgentPipeline:
             return pd.read_csv(io.BytesIO(data))
         return pd.read_excel(io.BytesIO(data))
 
-    def _build_presentation(self, analysis, filename: str, insights, visualizations, mapping) -> Path:
+    def _build_presentation(self, analysis, filename: str, bullets, mapping) -> Path:
         assets = fetch_brand_assets(
             self.drive,
             parse_drive_folder_id(self.config.brand_assets_drive_folder_url),
@@ -173,8 +171,7 @@ class AgentPipeline:
         return generator.build(
             analysis,
             output_path,
-            insights,
-            visualizations,
+            bullets,
             mapping,
             report_source=filename,
             primary_font=self.config.brand_font_primary,
