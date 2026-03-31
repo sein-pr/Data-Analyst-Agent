@@ -17,6 +17,7 @@ from .data_healer import MappingResult
 from .brand import BrandGuidelines
 from .logger import get_logger
 from .quickchart_client import QuickChartClient
+from .insight_engine import Insight, VisualizationSuggestion
 
 logger = get_logger(__name__)
 
@@ -49,7 +50,8 @@ class PPTXGenerator:
         self,
         analysis: AnalysisResult,
         output_path: Path,
-        bullets: List[str],
+        insights: List[Insight],
+        visualizations: List[VisualizationSuggestion],
         mapping: MappingResult,
         report_source: str,
         primary_font: str | None = None,
@@ -62,7 +64,7 @@ class PPTXGenerator:
         prs.slide_width = self.slide_width
         prs.slide_height = self.slide_height
         self._add_title_slide(prs, analysis)
-        self._add_kpi_summary_slide(prs, bullets)
+        self._add_kpi_summary_slide(prs, insights)
         self._add_kpi_slide(prs, analysis)
         self._add_self_healing_slide(prs, analysis, mapping)
         if self._should_add_mapping_slide(mapping):
@@ -70,7 +72,8 @@ class PPTXGenerator:
         if analysis.monthly_revenue:
             self._add_mom_trend_slide(prs, analysis)
         self._add_data_quality_slide(prs, analysis)
-        self._add_recommendations_slide(prs, analysis, bullets)
+        self._add_visualizations_slide(prs, visualizations)
+        self._add_recommendations_slide(prs, analysis, insights)
         self._apply_theme(prs)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -182,7 +185,7 @@ class PPTXGenerator:
         subtitle_tf.paragraphs[0].font.color.rgb = RGBColor.from_string(self.brand.palette.secondary[1:])
         self._apply_font(subtitle_tf, size=18)
 
-    def _add_kpi_summary_slide(self, prs: Presentation, bullets: List[str]) -> None:
+    def _add_kpi_summary_slide(self, prs: Presentation, insights: List[Insight]) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
 
@@ -200,16 +203,19 @@ class PPTXGenerator:
         tx_box = slide.shapes.add_textbox(left, top, width, height)
         tf = tx_box.text_frame
         tf.word_wrap = True
-        if not bullets:
-            bullets = ["Key performance is stable with no major anomalies detected."]
-        tf.text = bullets[0]
-        tf.paragraphs[0].font.size = Pt(18)
-        self._apply_font(tf, size=18)
-        for bullet in bullets[1:]:
-            p = tf.add_paragraph()
-            p.text = bullet
-            p.level = 0
-            p.font.size = Pt(18)
+        if not insights:
+            insights = [Insight(title="Summary", bullets=["Key performance is stable."])]
+        tf.text = ""
+        for idx, insight in enumerate(insights[:5]):
+            p_title = tf.paragraphs[0] if idx == 0 else tf.add_paragraph()
+            p_title.text = self._wrap_text(insight.title, 48)
+            p_title.font.size = Pt(18)
+            p_title.font.bold = True
+            for bullet in insight.bullets[:3]:
+                p = tf.add_paragraph()
+                p.text = f"• {self._wrap_text(bullet, 70)}"
+                p.level = 0
+                p.font.size = Pt(16)
         self._shrink_text_to_fit(tf, max_chars=700, base_size=18, min_size=14)
 
     def _add_kpi_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
@@ -345,7 +351,7 @@ class PPTXGenerator:
             table.cell(idx, 1).text = value
 
     def _add_recommendations_slide(
-        self, prs: Presentation, analysis: AnalysisResult, bullets: List[str]
+        self, prs: Presentation, analysis: AnalysisResult, insights: List[Insight]
     ) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
@@ -364,8 +370,7 @@ class PPTXGenerator:
         tx_box = slide.shapes.add_textbox(left, top, width, height)
         tf = tx_box.text_frame
         tf.word_wrap = True
-        if not bullets:
-            bullets = ["Review top-performing categories and investigate outliers."]
+        bullets = self._derive_recommendations(insights)
         tf.text = bullets[0]
         tf.paragraphs[0].font.size = Pt(22)
         tf.paragraphs[0].alignment = PP_ALIGN.LEFT
@@ -379,13 +384,50 @@ class PPTXGenerator:
         self._add_slide_notes(slide, f"Bullets generated: {len(bullets)}")
         self._shrink_text_to_fit(tf, max_chars=700, base_size=22, min_size=16)
 
+    def _add_visualizations_slide(self, prs: Presentation, visualizations: List[VisualizationSuggestion]) -> None:
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        self._add_header_bar(slide)
+
+        title_box = slide.shapes.add_textbox(self.margin, Inches(0.6), Inches(8.8), Inches(0.6))
+        title_tf = title_box.text_frame
+        title_tf.text = "Visualizations"
+        title_tf.paragraphs[0].font.size = Pt(28)
+        title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=28, bold=True)
+
+        left = self.margin
+        top = Inches(1.5)
+        width = Inches(9.0)
+        height = Inches(5.0)
+        tx_box = slide.shapes.add_textbox(left, top, width, height)
+        tf = tx_box.text_frame
+        tf.word_wrap = True
+        if not visualizations:
+            visualizations = [
+                VisualizationSuggestion(
+                    title="Top Products by Revenue",
+                    chart_type="bar",
+                    description="Compare top product categories by total revenue.",
+                )
+            ]
+        tf.text = self._wrap_text(
+            f"{visualizations[0].title} ({visualizations[0].chart_type})", 70
+        )
+        tf.paragraphs[0].font.size = Pt(18)
+        self._apply_font(tf, size=18)
+        for viz in visualizations[1:]:
+            p = tf.add_paragraph()
+            p.text = self._wrap_text(f"{viz.title} ({viz.chart_type}) - {viz.description}", 70)
+            p.level = 0
+            p.font.size = Pt(16)
+
     def _add_data_quality_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
 
         title_box = slide.shapes.add_textbox(self.margin, Inches(0.6), Inches(8.8), Inches(0.6))
         title_tf = title_box.text_frame
-        title_tf.text = "Data Quality"
+        title_tf.text = "Dataset Overview"
         title_tf.paragraphs[0].font.size = Pt(28)
         title_tf.paragraphs[0].font.bold = True
         self._apply_font(title_tf, size=28, bold=True)
@@ -417,9 +459,17 @@ class PPTXGenerator:
 
         note_box = slide.shapes.add_textbox(Inches(5.3), Inches(1.5), Inches(4.2), Inches(3.0))
         tf = note_box.text_frame
-        tf.text = "Data quality metrics summarize completeness and duplication risks."
+        tf.text = "Dataset summary and quality metrics."
         tf.paragraphs[0].font.size = Pt(18)
         self._apply_font(tf, size=18)
+
+        schema_box = slide.shapes.add_textbox(self.margin, Inches(4.7), Inches(9.0), Inches(1.3))
+        schema_tf = schema_box.text_frame
+        schema_tf.text = self._wrap_text(
+            f"Columns: {analysis.schema_overview.get('columns', '')}", 90
+        )
+        schema_tf.paragraphs[0].font.size = Pt(12)
+        self._apply_font(schema_tf, size=12)
 
         self._add_slide_notes(slide, f"Missing cell %: {analysis.data_quality.get('missing_pct', '')}")
 
@@ -629,6 +679,31 @@ class PPTXGenerator:
             notes.text += f"\n{note}"
         else:
             notes.text = note
+
+    @staticmethod
+    def _wrap_text(text: str, max_len: int) -> str:
+        words = text.split()
+        lines = []
+        current = []
+        for word in words:
+            if sum(len(w) for w in current) + len(current) + len(word) > max_len:
+                lines.append(" ".join(current))
+                current = [word]
+            else:
+                current.append(word)
+        if current:
+            lines.append(" ".join(current))
+        return "\n".join(lines)
+
+    @staticmethod
+    def _derive_recommendations(insights: List[Insight]) -> List[str]:
+        bullets: List[str] = []
+        for insight in insights[:5]:
+            if insight.bullets:
+                bullets.append(f"• {insight.bullets[0]}")
+        if not bullets:
+            bullets = ["• Review top-performing categories and investigate outliers."]
+        return bullets
 
     def _should_add_mapping_slide(self, mapping: MappingResult) -> bool:
         return len(mapping.mapping) > 10 or len(mapping.new_columns) > 10

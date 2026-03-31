@@ -11,3 +11,5 @@ uvicorn
 pydantic
 requests
 python-dotenv
+duckdb
+pandasai
