@@ -22,9 +22,10 @@ class InsightGenerator:
 
         try:
             prompt = (
-                "You are an executive analyst. Based on the summary below, write 4 concise executive bullets "
+                "You are an executive analyst. Based on the summary below, write 3-5 concise executive bullets "
                 "explaining the WHY behind the numbers (not just the what). "
-                "Return ONLY strict JSON as {\"bullets\": [\"...\"]} with exactly 4 items.\n"
+                "Each bullet must be a single short sentence (max 20 words). "
+                "Return ONLY strict JSON as {\"bullets\": [\"...\"]}.\n"
                 f"KPI Summary: {analysis.kpis}\n"
                 f"Top Products: {analysis.top_products}\n"
                 f"Outliers: {analysis.outliers}\n"
@@ -54,9 +55,17 @@ class InsightGenerator:
         return bullets
 
     def _validate_bullets(self, bullets: List[str]) -> List[str]:
-        clean = [b.strip() for b in bullets if b and isinstance(b, str)]
-        if len(clean) >= 4:
-            return clean[:4]
+        clean = []
+        for bullet in bullets:
+            if not bullet or not isinstance(bullet, str):
+                continue
+            text = bullet.strip().replace("\n", " ")
+            words = text.split()
+            if len(words) > 20:
+                text = " ".join(words[:20]).rstrip() + "..."
+            clean.append(text)
+        if len(clean) > 5:
+            return clean[:5]
         return clean
 
     @staticmethod
