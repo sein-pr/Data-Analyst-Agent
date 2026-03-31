@@ -26,33 +26,38 @@ class InsightGenerator:
                 "explaining the WHY behind the numbers (not just the what). "
                 "Each bullet must be a single short sentence (max 20 words). "
                 "Return ONLY strict JSON as {\"bullets\": [\"...\"]}.\n"
+                "Also include 3 short, actionable recommendations under \"recommendations\".\n"
                 f"KPI Summary: {analysis.kpis}\n"
                 f"Top Products: {analysis.top_products}\n"
                 f"Outliers: {analysis.outliers}\n"
             )
             text = self.llm_client.generate_text(prompt)
-            bullets = self._parse_bullets(text)
+            bullets, recommendations = self._parse_bullets(text)
             bullets = self._validate_bullets(bullets)
+            if recommendations:
+                return bullets + recommendations
             return bullets or self._fallback_bullets(analysis)
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM insight generation failed; using fallback bullets. %s", exc)
             return self._fallback_bullets(analysis)
 
-    def _parse_bullets(self, text: str) -> List[str]:
+    def _parse_bullets(self, text: str) -> tuple[List[str], List[str]]:
         try:
             data = json.loads(text)
         except Exception:  # noqa: BLE001
             data = self._extract_json(text)
         bullets = []
+        recommendations = []
         if isinstance(data, dict):
             try:
                 model = BulletsSchema.model_validate(data)
                 bullets = model.bullets
+                recommendations = model.recommendations
             except ValidationError:
                 logger.warning("Bullets schema validation failed.")
         if not bullets:
             logger.warning("Failed to parse insight bullets from LLM response.")
-        return bullets
+        return bullets, recommendations
 
     def _validate_bullets(self, bullets: List[str]) -> List[str]:
         clean = []
@@ -95,9 +100,16 @@ class InsightGenerator:
 
 class BulletsSchema(BaseModel):
     bullets: List[str]
+    recommendations: List[str] = []
 
     @field_validator("bullets")
     @classmethod
     def _clean_bullets(cls, value: List[str]) -> List[str]:
+        cleaned = [str(b).strip() for b in value if str(b).strip()]
+        return cleaned
+
+    @field_validator("recommendations")
+    @classmethod
+    def _clean_recommendations(cls, value: List[str]) -> List[str]:
         cleaned = [str(b).strip() for b in value if str(b).strip()]
         return cleaned
