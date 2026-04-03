@@ -30,14 +30,7 @@ class InsightGenerator:
             text = self.llm_client.generate_text(prompt)
             bullets, recommendations = self._parse_bullets(text)
             if not bullets:
-                retry_prompt = (
-                    "Return ONLY valid JSON with keys 'bullets' and 'recommendations'. "
-                    "No extra text. Reformat your last response.\n\n"
-                    "Output format:\n"
-                    "{\"bullets\": [\"...\"], \"recommendations\": [\"...\"]}"
-                )
-                text = self.llm_client.generate_text(retry_prompt)
-                bullets, recommendations = self._parse_bullets(text)
+                bullets, recommendations = self._salvage_from_text(text)
             bullets = self._validate_bullets(bullets)
             if recommendations:
                 return bullets + [f"Rec: {r}" for r in recommendations]
@@ -89,6 +82,30 @@ class InsightGenerator:
         if not bullets:
             logger.warning("Failed to parse insight bullets from LLM response.")
         return bullets, recommendations
+
+    def _salvage_from_text(self, text: str) -> tuple[List[str], List[str]]:
+        if not text:
+            return [], []
+        bullets: List[str] = []
+        recommendations: List[str] = []
+        for line in text.splitlines():
+            cleaned = line.strip().lstrip("-•*").strip()
+            if not cleaned:
+                continue
+            lower = cleaned.lower()
+            if "recommend" in lower:
+                continue
+            bullets.append(cleaned)
+        if not bullets:
+            sentences = [s.strip() for s in text.split(".") if s.strip()]
+            bullets = sentences[:5]
+        if "recommend" in text.lower():
+            rec_section = text.lower().split("recommend")[1]
+            for line in rec_section.splitlines():
+                cleaned = line.strip().lstrip("-•*").strip()
+                if cleaned:
+                    recommendations.append(cleaned)
+        return bullets[:5], recommendations[:3]
 
     def _validate_bullets(self, bullets: List[str]) -> List[str]:
         clean = []
