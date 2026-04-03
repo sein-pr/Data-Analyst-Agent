@@ -36,8 +36,11 @@ class ExcelModelRunner:
                 return None
             config_path = fallback
         raw = json.loads(config_path.read_text(encoding="utf-8"))
+        model_path = str(raw.get("model_path", ""))
+        if model_path and not Path(model_path).is_absolute():
+            model_path = str((config_path.parent / model_path).resolve())
         return ExcelModelConfig(
-            model_path=str(raw.get("model_path", "")),
+            model_path=model_path,
             sheet=raw.get("sheet"),
             inputs=raw.get("inputs", {}),
             outputs=raw.get("outputs", {}),
