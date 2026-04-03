@@ -1,0 +1,27 @@
+{
+  "model_path": "srs/excel_models/finance_model.xlsx",
+  "sheet": "Model",
+  "engine": "auto",
+  "inputs": {
+    "B2": "kpi:Total Revenue",
+    "B3": "kpi:Total Cost",
+    "B4": "kpi:MoM Growth"
+  },
+  "outputs": {
+    "profit": {
+      "cell": "B6",
+      "formula": "B2-B3"
+    },
+    "margin_pct": {
+      "cell": "B7",
+      "formula": "B6/B2"
+    },
+    "forecast": {
+      "cell": "B8",
+      "formula": "B2*(1+B4)"
+    },
+    "risk_flag": {
+      "cell": "B9"
+    }
+  }
+}

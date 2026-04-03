@@ -36,6 +36,12 @@ class AnalysisEngine:
         if "Revenue" in df.columns:
             total_revenue = df["Revenue"].sum()
             kpis["Total Revenue"] = f"{total_revenue:,.2f}"
+        if "Cost" in df.columns:
+            total_cost = df["Cost"].sum()
+            kpis["Total Cost"] = f"{total_cost:,.2f}"
+        if "Margin" in df.columns:
+            total_margin = df["Margin"].sum()
+            kpis["Total Margin"] = f"{total_margin:,.2f}"
 
         monthly_revenue: List[Dict[str, str]] = []
         df = df.copy()
@@ -55,6 +61,14 @@ class AnalysisEngine:
                 total = con.execute("SELECT SUM(Revenue) FROM data").fetchone()[0]
                 if total is not None:
                     kpis["Total Revenue"] = f"{float(total):,.2f}"
+            if "Cost" in df.columns:
+                total_cost = con.execute("SELECT SUM(Cost) FROM data").fetchone()[0]
+                if total_cost is not None:
+                    kpis["Total Cost"] = f"{float(total_cost):,.2f}"
+            if "Margin" in df.columns:
+                total_margin = con.execute("SELECT SUM(Margin) FROM data").fetchone()[0]
+                if total_margin is not None:
+                    kpis["Total Margin"] = f"{float(total_margin):,.2f}"
             if {"Revenue", "Date"}.issubset(df.columns):
                 monthly_df = con.execute(
                     "SELECT date_trunc('month', Date) AS month, "
