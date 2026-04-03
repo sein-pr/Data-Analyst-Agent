@@ -32,6 +32,8 @@ class InsightGenerator:
             if not bullets:
                 bullets, recommendations = self._salvage_from_text(text)
             bullets = self._validate_bullets(bullets)
+            if not recommendations:
+                recommendations = self._fallback_recommendations(analysis)
             if recommendations:
                 return bullets + [f"Rec: {r}" for r in recommendations]
             return bullets or self._fallback_bullets(analysis)
@@ -46,7 +48,7 @@ class InsightGenerator:
         return (
             "You are an executive analyst tasked with analyzing KPI data and identifying causal drivers of performance.\n\n"
             "## Your Task\n"
-            "Analyze the provided KPI summary, top products, and outliers to identify root causes and patterns—not "
+            "Analyze the provided KPI summary, top products, and outliers to identify root causes and patterns - not "
             "descriptive summaries of what happened. Your analysis should reveal the WHY behind performance movements.\n\n"
             "## Deliverable Requirements\n"
             "Bullets:\n"
@@ -89,7 +91,7 @@ class InsightGenerator:
         bullets: List[str] = []
         recommendations: List[str] = []
         for line in text.splitlines():
-            cleaned = line.strip().lstrip("-•*").strip()
+            cleaned = self._sanitize_text(line).lstrip("-*").strip()
             if not cleaned:
                 continue
             lower = cleaned.lower()
@@ -102,7 +104,7 @@ class InsightGenerator:
         if "recommend" in text.lower():
             rec_section = text.lower().split("recommend")[1]
             for line in rec_section.splitlines():
-                cleaned = line.strip().lstrip("-•*").strip()
+                cleaned = self._sanitize_text(line).lstrip("-*").strip()
                 if cleaned:
                     recommendations.append(cleaned)
         return bullets[:5], recommendations[:3]
@@ -112,7 +114,7 @@ class InsightGenerator:
         for bullet in bullets:
             if not bullet or not isinstance(bullet, str):
                 continue
-            text = bullet.strip().replace("\n", " ")
+            text = self._sanitize_text(bullet).replace("\n", " ").strip()
             words = text.split()
             if len(words) > 50:
                 text = " ".join(words[:50]).rstrip() + "..."
@@ -144,6 +146,37 @@ class InsightGenerator:
         if not bullets:
             bullets.append("Data indicates stable performance with no major anomalies detected.")
         return bullets[:4]
+
+    def _fallback_recommendations(self, analysis: AnalysisResult) -> List[str]:
+        recommendations: List[str] = []
+        if analysis.top_products:
+            recommendations.append("Protect supply and pricing for top categories to sustain revenue concentration.")
+        if analysis.outliers:
+            recommendations.append("Validate outlier records and investigate drivers to separate one-offs from trends.")
+        if "MoM Growth" in analysis.kpis:
+            recommendations.append("Align marketing and inventory with the latest demand signal to stabilize momentum.")
+        while len(recommendations) < 3:
+            recommendations.append("Review KPI drivers weekly and adjust tactics based on leading indicators.")
+        return recommendations[:3]
+
+    @staticmethod
+    def _sanitize_text(text: str) -> str:
+        if not text:
+            return ""
+        replacements = {
+            "**": "",
+            "__": "",
+            "`": "",
+            "#": "",
+            ">": "",
+            "|": " ",
+            "\t": " ",
+            "\\u2022": "",
+        }
+        for key, value in replacements.items():
+            text = text.replace(key, value)
+        text = " ".join(text.split())
+        return text
 
 
 class BulletsSchema(BaseModel):

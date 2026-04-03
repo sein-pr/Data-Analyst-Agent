@@ -54,6 +54,7 @@ class PPTXGenerator:
         report_source: str,
         primary_font: str | None = None,
         department_label: str | None = None,
+        previous_analysis: dict | None = None,
     ) -> Path:
         if primary_font:
             self.primary_font = primary_font
@@ -65,6 +66,8 @@ class PPTXGenerator:
         self._add_title_slide(prs, analysis, department_label)
         self._add_kpi_summary_slide(prs, bullets)
         self._add_kpi_slide(prs, analysis)
+        if previous_analysis:
+            self._add_comparison_slide(prs, analysis, previous_analysis)
         self._add_self_healing_slide(prs, analysis, mapping)
         if self._should_add_mapping_slide(mapping):
             self._add_mapping_detail_slide(prs, mapping)
@@ -202,14 +205,15 @@ class PPTXGenerator:
         tx_box = slide.shapes.add_textbox(left, top, width, height)
         tf = tx_box.text_frame
         tf.word_wrap = True
+        bullets = [b for b in bullets if not b.lower().startswith("rec:")]
         if not bullets:
             bullets = ["Key performance is stable with no major anomalies detected."]
-        tf.text = f"• {self._wrap_text(bullets[0], 70)}"
+        tf.text = f"- {self._wrap_text(bullets[0], 70)}"
         tf.paragraphs[0].font.size = Pt(18)
         self._apply_font(tf, size=18)
         for bullet in bullets[1:]:
             p = tf.add_paragraph()
-            p.text = f"• {self._wrap_text(bullet, 70)}"
+            p.text = f"- {self._wrap_text(bullet, 70)}"
             p.level = 0
             p.font.size = Pt(18)
         self._shrink_text_to_fit(tf, max_chars=700, base_size=18, min_size=14)
@@ -269,6 +273,59 @@ class PPTXGenerator:
         self._add_outliers_table(slide, analysis)
         self._add_top_products_chart(slide, analysis)
 
+    def _add_comparison_slide(
+        self, prs: Presentation, analysis: AnalysisResult, previous_analysis: dict
+    ) -> None:
+        prev_kpis = previous_analysis.get("kpis") or {}
+        if not prev_kpis:
+            return
+
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        self._add_header_bar(slide)
+
+        title_box = slide.shapes.add_textbox(self.margin, Inches(0.6), Inches(8.8), Inches(0.6))
+        title_tf = title_box.text_frame
+        title_tf.text = "Comparative Analysis"
+        title_tf.paragraphs[0].font.size = Pt(28)
+        title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=28, bold=True)
+
+        common_keys = [k for k in analysis.kpis.keys() if k in prev_kpis]
+        if not common_keys:
+            common_keys = list(analysis.kpis.keys())[:6]
+
+        rows = min(len(common_keys) + 1, 7)
+        table = slide.shapes.add_table(
+            rows=rows,
+            cols=4,
+            left=self.margin,
+            top=Inches(1.5),
+            width=Inches(9.0),
+            height=Inches(3.0),
+        ).table
+        table.cell(0, 0).text = "KPI"
+        table.cell(0, 1).text = "Current"
+        table.cell(0, 2).text = "Previous"
+        table.cell(0, 3).text = "Delta"
+        self._style_table_header(table)
+
+        for idx, key in enumerate(common_keys[:6], start=1):
+            current = analysis.kpis.get(key, "")
+            previous = prev_kpis.get(key, "")
+            delta = self._format_delta(current, previous)
+            table.cell(idx, 0).text = key
+            table.cell(idx, 1).text = str(current)
+            table.cell(idx, 2).text = str(previous)
+            table.cell(idx, 3).text = delta
+            for col in range(4):
+                self._apply_font(table.cell(idx, col).text_frame, size=16)
+
+        note_box = slide.shapes.add_textbox(self.margin, Inches(4.9), Inches(9.0), Inches(1.5))
+        tf = note_box.text_frame
+        tf.text = "Variance is computed from the latest stored analysis for this schema."
+        tf.paragraphs[0].font.size = Pt(12)
+        self._apply_font(tf, size=12)
+
     def _add_self_healing_slide(
         self, prs: Presentation, analysis: AnalysisResult, mapping: MappingResult
     ) -> None:
@@ -297,7 +354,7 @@ class PPTXGenerator:
             mapping_title.font.bold = True
             for raw, target in mapping.mapping.items():
                 p = body_tf.add_paragraph()
-                p.text = f"{raw} → {target}"
+                p.text = f"{raw} -> {target}"
                 p.level = 1
                 p.font.size = Pt(18)
 
@@ -369,13 +426,13 @@ class PPTXGenerator:
         recs = self._extract_recommendations(bullets)
         if not recs:
             recs = ["Review top-performing categories and investigate outliers."]
-        tf.text = f"• {self._wrap_text(recs[0], 70)}"
+        tf.text = f"- {self._wrap_text(recs[0], 70)}"
         tf.paragraphs[0].font.size = Pt(22)
         tf.paragraphs[0].alignment = PP_ALIGN.LEFT
         self._apply_font(tf, size=22)
         for bullet in recs[1:]:
             p = tf.add_paragraph()
-            p.text = f"• {self._wrap_text(bullet, 70)}"
+            p.text = f"- {self._wrap_text(bullet, 70)}"
             p.level = 0
             p.font.size = Pt(22)
 
@@ -451,7 +508,7 @@ class PPTXGenerator:
         labels = []
         for item in analysis.top_products:
             label = item.get("Product Category", "")
-            labels.append(label[:12] + "…" if len(label) > 12 else label)
+            labels.append(label[:12] + "..." if len(label) > 12 else label)
         values = []
         for item in analysis.top_products:
             raw = item.get("Revenue", "0").replace(",", "")
@@ -640,6 +697,31 @@ class PPTXGenerator:
             notes.text += f"\n{note}"
         else:
             notes.text = note
+
+    @staticmethod
+    def _parse_number(value: str) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).replace(",", "").replace("%", "").strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+
+    def _format_delta(self, current: str, previous: str) -> str:
+        curr = self._parse_number(current)
+        prev = self._parse_number(previous)
+        if curr is None or prev is None:
+            return ""
+        diff = curr - prev
+        if prev != 0:
+            pct = diff / prev
+            return f"{diff:,.2f} ({pct:.1%})"
+        return f"{diff:,.2f}"
 
     @staticmethod
     def _wrap_text(text: str, max_len: int) -> str:

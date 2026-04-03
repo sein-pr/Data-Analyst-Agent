@@ -165,6 +165,7 @@ class AgentPipeline:
                         bullets,
                         mapping,
                         department=dept.name,
+                        previous_analysis=previous,
                     )
                     self._upload_report(pptx_path)
                     self._write_processed_index(file.name, pptx_path.name, processed_folder_id)
@@ -207,7 +208,15 @@ class AgentPipeline:
             return pd.read_csv(io.BytesIO(data))
         return pd.read_excel(io.BytesIO(data))
 
-    def _build_presentation(self, analysis, filename: str, bullets, mapping, department: str) -> Path:
+    def _build_presentation(
+        self,
+        analysis,
+        filename: str,
+        bullets,
+        mapping,
+        department: str,
+        previous_analysis: dict | None = None,
+    ) -> Path:
         assets = fetch_brand_assets(
             self.drive,
             parse_drive_folder_id(self.config.brand_assets_drive_folder_url),
@@ -229,6 +238,7 @@ class AgentPipeline:
             report_source=filename,
             primary_font=self.config.brand_font_primary,
             department_label=department,
+            previous_analysis=previous_analysis,
         )
 
     def _upload_report(self, pptx_path: Path) -> None:
