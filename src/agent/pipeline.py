@@ -25,6 +25,7 @@ from .watcher import mark_processed, watch_folder
 from .department_detector import detect_departments
 from .prompt_loader import PromptLoader
 from .supabase_store import SupabaseStore
+from .excel_model.runner import ExcelModelRunner
 
 logger = get_logger(__name__)
 
@@ -42,6 +43,7 @@ class AgentPipeline:
         self.analysis_engine = AnalysisEngine()
         self.insights = InsightGenerator(self.llm_client)
         self.prompt_loader = PromptLoader()
+        self.excel_models = ExcelModelRunner(Path(config.excel_model_config_dir or "srs/excel_models"))
         self.supabase = None
         if config.supabase_url and config.supabase_key:
             self.supabase = SupabaseStore(
@@ -139,6 +141,13 @@ class AgentPipeline:
                     previous = self.supabase.fetch_latest(analysis.schema_signature)
 
                 for dept in departments:
+                    context = {
+                        "kpi": analysis.kpis,
+                        "summary": analysis.summary,
+                        "data_quality": analysis.data_quality,
+                        "schema": analysis.schema_overview,
+                    }
+                    excel_result = self.excel_models.run_for_department(dept.name, context)
                     dept_prompt = self.prompt_loader.load_department_prompt(dept.name)
                     pp_prompt = self.prompt_loader.load_powerpoint_prompt()
                     prompt = (
@@ -180,6 +189,7 @@ class AgentPipeline:
                         f"Outliers: {analysis.outliers}\n"
                         f"Data Quality: {analysis.data_quality}\n"
                         f"Schema: {analysis.schema_overview}\n"
+                        f"Excel Model Result: {excel_result or {}}\n"
                         f"Previous Analysis: {previous or {}}\n"
                     )
                     sections = self.insights.generate_sections(

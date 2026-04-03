@@ -13,3 +13,4 @@ requests
 python-dotenv
 duckdb
 supabase
+excel-formulas-calculator

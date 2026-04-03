@@ -62,6 +62,7 @@ class EnvConfig:
     webhook_token: Optional[str]
     change_page_token_path: Optional[str]
     retry_failed_on_empty: Optional[bool]
+    excel_model_config_dir: Optional[str]
 
 
 def load_config() -> EnvConfig:
@@ -97,4 +98,5 @@ def load_config() -> EnvConfig:
         webhook_token=os.getenv("WEBHOOK_TOKEN"),
         change_page_token_path=os.getenv("CHANGE_PAGE_TOKEN_PATH"),
         retry_failed_on_empty=os.getenv("RETRY_FAILED_ON_EMPTY", "true").lower() == "true",
+        excel_model_config_dir=os.getenv("EXCEL_MODEL_CONFIG_DIR", "srs/excel_models"),
     )
