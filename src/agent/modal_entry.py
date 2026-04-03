@@ -15,11 +15,13 @@ app = modal.App("autonomous-data-analyst-agent")
 
 ENV_SECRET_NAME = "data-agent-env"
 PYTHONPATH_ROOT = "/root/src"
+SRS_ROOT = "/root/srs"
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install_from_requirements("requirements.txt")
     .add_local_dir("src", remote_path=PYTHONPATH_ROOT, copy=True)
+    .add_local_dir("srs", remote_path=SRS_ROOT, copy=True)
     .env({"PYTHONPATH": PYTHONPATH_ROOT})
 )
 
