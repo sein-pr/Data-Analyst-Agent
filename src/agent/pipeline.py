@@ -143,6 +143,27 @@ class AgentPipeline:
                     pp_prompt = self.prompt_loader.load_powerpoint_prompt()
                     prompt = (
                         f"{pp_prompt}\n\n"
+                        "You are a JSON generator.\n\n"
+                        "Your task is to return ONLY valid JSON.\n\n"
+                        "STRICT RULES:\n"
+                        "- Output ONLY JSON\n"
+                        "- Do NOT include explanations\n"
+                        "- Do NOT include markdown (no ```json)\n"
+                        "- Do NOT include text before or after\n"
+                        "- Do NOT include comments\n"
+                        "- Ensure the JSON is valid and parsable\n\n"
+                        "If you violate these rules, the output is invalid.\n\n"
+                        "JSON SCHEMA:\n"
+                        "{\n"
+                        "  \"title\": \"string\",\n"
+                        "  \"insights\": [\n"
+                        "    {\"headline\": \"string\", \"description\": \"string\"}\n"
+                        "  ],\n"
+                        "  \"recommendations\": [\n"
+                        "    {\"action\": \"string\", \"impact\": \"string\"}\n"
+                        "  ]\n"
+                        "}\n\n"
+                        "Now generate the JSON based on the input data.\n\n"
                         "Dataset is provided below; do not ask for it.\n\n"
                         f"{dept_prompt or ''}\n\n"
                         "Use the following data summaries:\n"
@@ -152,7 +173,6 @@ class AgentPipeline:
                         f"Data Quality: {analysis.data_quality}\n"
                         f"Schema: {analysis.schema_overview}\n"
                         f"Previous Analysis: {previous or {}}\n"
-                        "Return ONLY valid JSON with bullets and recommendations."
                     )
                     bullets = self.insights.generate_bullets(
                         analysis,

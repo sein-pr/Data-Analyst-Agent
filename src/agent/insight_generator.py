@@ -80,7 +80,18 @@ class InsightGenerator:
                 bullets = model.bullets
                 recommendations = model.recommendations
             except ValidationError:
-                logger.warning("Bullets schema validation failed.")
+                try:
+                    model = StructuredSchema.model_validate(data)
+                    bullets = [
+                        f"{item.headline}: {item.description}".strip(": ").strip()
+                        for item in model.insights
+                    ]
+                    recommendations = [
+                        f"{item.action} (Impact: {item.impact})".strip()
+                        for item in model.recommendations
+                    ]
+                except ValidationError:
+                    logger.warning("Bullets schema validation failed.")
         if not bullets:
             logger.warning("Failed to parse insight bullets from LLM response.")
         return bullets, recommendations
@@ -194,3 +205,19 @@ class BulletsSchema(BaseModel):
     def _clean_recommendations(cls, value: List[str]) -> List[str]:
         cleaned = [str(b).strip() for b in value if str(b).strip()]
         return cleaned
+
+
+class InsightItem(BaseModel):
+    headline: str
+    description: str
+
+
+class RecommendationItem(BaseModel):
+    action: str
+    impact: str
+
+
+class StructuredSchema(BaseModel):
+    title: str
+    insights: List[InsightItem]
+    recommendations: List[RecommendationItem]
