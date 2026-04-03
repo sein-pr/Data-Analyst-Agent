@@ -29,6 +29,15 @@ class InsightGenerator:
             prompt = prompt_override or self._default_prompt(analysis, previous_analysis)
             text = self.llm_client.generate_text(prompt)
             bullets, recommendations = self._parse_bullets(text)
+            if not bullets:
+                retry_prompt = (
+                    "Return ONLY valid JSON with keys 'bullets' and 'recommendations'. "
+                    "No extra text. Reformat your last response.\n\n"
+                    "Output format:\n"
+                    "{\"bullets\": [\"...\"], \"recommendations\": [\"...\"]}"
+                )
+                text = self.llm_client.generate_text(retry_prompt)
+                bullets, recommendations = self._parse_bullets(text)
             bullets = self._validate_bullets(bullets)
             if recommendations:
                 return bullets + [f"Rec: {r}" for r in recommendations]
