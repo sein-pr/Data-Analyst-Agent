@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import modal
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from agent.config import load_config
 from agent.pipeline import AgentPipeline
