@@ -155,9 +155,22 @@ class AgentPipeline:
                         "If you violate these rules, the output is invalid.\n\n"
                         "JSON SCHEMA:\n"
                         "{\n"
-                        "  \"bullets\": [\"bullet 1\", \"bullet 2\", \"bullet 3\"],\n"
-                        "  \"recommendations\": [\"recommendation 1\", \"recommendation 2\", \"recommendation 3\"]\n"
+                        "  \"title\": \"string\",\n"
+                        "  \"executive_summary\": [\"string\"],\n"
+                        "  \"objectives\": [\"string\"],\n"
+                        "  \"data_overview\": [\"string\"],\n"
+                        "  \"methodology\": [\"string\"],\n"
+                        "  \"key_findings\": [\"string\"],\n"
+                        "  \"insights_interpretation\": [\"string\"],\n"
+                        "  \"department_analysis\": [\"string\"],\n"
+                        "  \"comparative_analysis\": [\"string\"],\n"
+                        "  \"risks_limitations\": [\"string\"],\n"
+                        "  \"recommendations\": [\"string\"],\n"
+                        "  \"conclusion\": [\"string\"],\n"
+                        "  \"next_steps\": [\"string\"],\n"
+                        "  \"appendix\": [\"string\"]\n"
                         "}\n\n"
+                        "Every field must be present. If data is not available, write \"Not applicable\" in the list.\n\n"
                         "Now generate the JSON based on the input data.\n\n"
                         "Dataset is provided below; do not ask for it.\n\n"
                         f"{dept_prompt or ''}\n\n"
@@ -169,7 +182,7 @@ class AgentPipeline:
                         f"Schema: {analysis.schema_overview}\n"
                         f"Previous Analysis: {previous or {}}\n"
                     )
-                    bullets = self.insights.generate_bullets(
+                    sections = self.insights.generate_sections(
                         analysis,
                         prompt_override=prompt,
                         previous_analysis=previous,
@@ -177,7 +190,7 @@ class AgentPipeline:
                     pptx_path = self._build_presentation(
                         analysis,
                         f"{dept.name}_{file.name}",
-                        bullets,
+                        sections,
                         mapping,
                         department=dept.name,
                         previous_analysis=previous,
@@ -227,7 +240,7 @@ class AgentPipeline:
         self,
         analysis,
         filename: str,
-        bullets,
+        sections: dict,
         mapping,
         department: str,
         previous_analysis: dict | None = None,
@@ -248,7 +261,7 @@ class AgentPipeline:
         return generator.build(
             analysis,
             output_path,
-            bullets,
+            sections,
             mapping,
             report_source=filename,
             primary_font=self.config.brand_font_primary,

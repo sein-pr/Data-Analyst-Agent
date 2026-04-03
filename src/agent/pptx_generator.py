@@ -49,7 +49,7 @@ class PPTXGenerator:
         self,
         analysis: AnalysisResult,
         output_path: Path,
-        bullets: List[str],
+        sections: dict,
         mapping: MappingResult,
         report_source: str,
         primary_font: str | None = None,
@@ -64,17 +64,28 @@ class PPTXGenerator:
         prs.slide_width = self.slide_width
         prs.slide_height = self.slide_height
         self._add_title_slide(prs, analysis, department_label)
-        self._add_kpi_summary_slide(prs, bullets)
+        self._add_kpi_summary_slide(prs, sections.get("executive_summary", []))
+        self._add_section_slide(prs, "Objectives / Business Questions", sections.get("objectives", []))
+        self._add_section_slide(prs, "Data Overview", sections.get("data_overview", []))
+        self._add_section_slide(prs, "Methodology", sections.get("methodology", []))
+        self._add_section_slide(prs, "Key Findings", sections.get("key_findings", []))
+        self._add_section_slide(prs, "Insights & Interpretation", sections.get("insights_interpretation", []))
+        self._add_section_slide(prs, "Department-Specific Analysis", sections.get("department_analysis", []))
         self._add_kpi_slide(prs, analysis)
         if previous_analysis:
             self._add_comparison_slide(prs, analysis, previous_analysis)
+        self._add_section_slide(prs, "Variance / Comparative Analysis", sections.get("comparative_analysis", []))
         self._add_self_healing_slide(prs, analysis, mapping)
         if self._should_add_mapping_slide(mapping):
             self._add_mapping_detail_slide(prs, mapping)
         if analysis.monthly_revenue:
             self._add_mom_trend_slide(prs, analysis)
         self._add_data_quality_slide(prs, analysis)
-        self._add_recommendations_slide(prs, analysis, bullets)
+        self._add_section_slide(prs, "Risks & Limitations", sections.get("risks_limitations", []))
+        self._add_recommendations_slide(prs, analysis, sections.get("recommendations", []))
+        self._add_section_slide(prs, "Conclusion", sections.get("conclusion", []))
+        self._add_section_slide(prs, "Next Steps", sections.get("next_steps", []))
+        self._add_section_slide(prs, "Appendix", sections.get("appendix", []))
         self._apply_theme(prs)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -214,6 +225,33 @@ class PPTXGenerator:
         for bullet in bullets[1:]:
             p = tf.add_paragraph()
             p.text = f"- {self._wrap_text(bullet, 70)}"
+            p.level = 0
+            p.font.size = Pt(18)
+        self._shrink_text_to_fit(tf, max_chars=700, base_size=18, min_size=14)
+
+    def _add_section_slide(self, prs: Presentation, title: str, items: List[str]) -> None:
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        self._add_header_bar(slide)
+
+        title_box = slide.shapes.add_textbox(self.margin, Inches(0.6), Inches(8.8), Inches(0.6))
+        title_tf = title_box.text_frame
+        title_tf.text = title
+        title_tf.paragraphs[0].font.size = Pt(26)
+        title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=26, bold=True)
+
+        body_box = slide.shapes.add_textbox(self.margin, Inches(1.5), Inches(9.0), Inches(5.2))
+        tf = body_box.text_frame
+        tf.word_wrap = True
+        cleaned = [i for i in items if i and isinstance(i, str)]
+        if not cleaned:
+            cleaned = ["Not applicable."]
+        tf.text = f"- {self._wrap_text(cleaned[0], 70)}"
+        tf.paragraphs[0].font.size = Pt(18)
+        self._apply_font(tf, size=18)
+        for item in cleaned[1:]:
+            p = tf.add_paragraph()
+            p.text = f"- {self._wrap_text(item, 70)}"
             p.level = 0
             p.font.size = Pt(18)
         self._shrink_text_to_fit(tf, max_chars=700, base_size=18, min_size=14)
@@ -404,7 +442,7 @@ class PPTXGenerator:
             table.cell(idx, 1).text = value
 
     def _add_recommendations_slide(
-        self, prs: Presentation, analysis: AnalysisResult, bullets: List[str]
+        self, prs: Presentation, analysis: AnalysisResult, recommendations: List[str]
     ) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
@@ -423,7 +461,7 @@ class PPTXGenerator:
         tx_box = slide.shapes.add_textbox(left, top, width, height)
         tf = tx_box.text_frame
         tf.word_wrap = True
-        recs = self._extract_recommendations(bullets)
+        recs = [r for r in recommendations if r and isinstance(r, str)]
         if not recs:
             recs = ["Review top-performing categories and investigate outliers."]
         tf.text = f"- {self._wrap_text(recs[0], 70)}"
