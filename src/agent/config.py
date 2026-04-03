@@ -31,6 +31,9 @@ class EnvConfig:
     gemini_model: str
     groq_api_keys: List[str]
     groq_model: str
+    supabase_url: Optional[str]
+    supabase_key: Optional[str]
+    supabase_table: Optional[str]
     groq_api_keys: List[str]
     groq_model: str
 
@@ -69,6 +72,9 @@ def load_config() -> EnvConfig:
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
         groq_api_keys=_get_env_list("GROQ_API_KEY_") + _get_env_list("GROK_API_KEY_"),
         groq_model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        supabase_url=os.getenv("SUPABASE_PROJECT_URL"),
+        supabase_key=os.getenv("SUPABASE_PUBLISHABLE_KEY"),
+        supabase_table=os.getenv("SUPABASE_TABLE"),
         modal_token_id=os.getenv("MODAL_TOKEN_ID"),
         modal_token_secret=os.getenv("MODAL_TOKEN_SECRET"),
         google_oauth_client_json_path=os.getenv("GOOGLE_OAUTH_CLIENT_JSON_PATH"),

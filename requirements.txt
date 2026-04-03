@@ -12,3 +12,4 @@ pydantic
 requests
 python-dotenv
 duckdb
+supabase

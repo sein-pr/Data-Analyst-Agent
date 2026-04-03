@@ -19,6 +19,7 @@ class AnalysisResult:
     monthly_revenue: List[Dict[str, str]]
     data_quality: Dict[str, str]
     schema_overview: Dict[str, str]
+    schema_signature: str
 
 
 class AnalysisEngine:
@@ -31,6 +32,7 @@ class AnalysisEngine:
             "columns": ", ".join(df.columns.astype(str).tolist()),
             "dtypes": ", ".join([f"{col}:{dtype}" for col, dtype in df.dtypes.items()]),
         }
+        schema_signature = "|".join(sorted([str(c).lower() for c in df.columns]))
         if "Revenue" in df.columns:
             total_revenue = df["Revenue"].sum()
             kpis["Total Revenue"] = f"{total_revenue:,.2f}"
@@ -143,6 +145,7 @@ class AnalysisEngine:
             monthly_revenue=monthly_revenue,
             data_quality=data_quality,
             schema_overview=schema_overview,
+            schema_signature=schema_signature,
         )
 
     def _compute_data_quality(self, df: pd.DataFrame) -> Dict[str, str]:

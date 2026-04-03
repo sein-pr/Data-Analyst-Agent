@@ -22,6 +22,9 @@ from .logger import get_logger
 from .pptx_generator import PPTXGenerator
 from .processed_registry import ProcessedRegistry
 from .watcher import mark_processed, watch_folder
+from .department_detector import detect_departments
+from .prompt_loader import PromptLoader
+from .supabase_store import SupabaseStore
 
 logger = get_logger(__name__)
 
@@ -38,6 +41,14 @@ class AgentPipeline:
         self.healer = DataHealer(["Revenue", "Date", "Product Category"], llm_client=self.llm_client)
         self.analysis_engine = AnalysisEngine()
         self.insights = InsightGenerator(self.llm_client)
+        self.prompt_loader = PromptLoader()
+        self.supabase = None
+        if config.supabase_url and config.supabase_key:
+            self.supabase = SupabaseStore(
+                config.supabase_url,
+                config.supabase_key,
+                table=config.supabase_table or "analysis_history",
+            )
         self.emailer = EmailNotifier.from_config(config)
         self.page_token_path = Path(config.change_page_token_path or "state/drive_page_token.txt")
 
@@ -117,21 +128,63 @@ class AgentPipeline:
                     )
                     continue
                 analysis = self.analysis_engine.analyze(df)
-                bullets = self.insights.generate_bullets(analysis)
-                pptx_path = self._build_presentation(
-                    analysis,
-                    file.name,
-                    bullets,
-                    mapping,
-                )
-                self._upload_report(pptx_path)
-                self._write_processed_index(file.name, pptx_path.name, processed_folder_id)
-                self._append_audit_log(file.name, pptx_path.name)
+                departments = detect_departments(df.columns.tolist())
+                if not departments:
+                    logger.warning("No department match found; skipping report generation.")
+                    self._with_retries(lambda: self.drive.move_file(file.id, processed_folder_id))
+                    continue
+
+                previous = None
+                if self.supabase:
+                    previous = self.supabase.fetch_latest(analysis.schema_signature)
+
+                for dept in departments:
+                    dept_prompt = self.prompt_loader.load_department_prompt(dept.name)
+                    pp_prompt = self.prompt_loader.load_powerpoint_prompt()
+                    prompt = (
+                        f"{pp_prompt}\n\n"
+                        "Dataset is provided below; do not ask for it.\n\n"
+                        f"{dept_prompt or ''}\n\n"
+                        "Use the following data summaries:\n"
+                        f"KPI Summary: {analysis.kpis}\n"
+                        f"Top Products: {analysis.top_products}\n"
+                        f"Outliers: {analysis.outliers}\n"
+                        f"Data Quality: {analysis.data_quality}\n"
+                        f"Schema: {analysis.schema_overview}\n"
+                        f"Previous Analysis: {previous or {}}\n"
+                        "Return ONLY valid JSON with bullets and recommendations."
+                    )
+                    bullets = self.insights.generate_bullets(
+                        analysis,
+                        prompt_override=prompt,
+                        previous_analysis=previous,
+                    )
+                    pptx_path = self._build_presentation(
+                        analysis,
+                        f"{dept.name}_{file.name}",
+                        bullets,
+                        mapping,
+                        department=dept.name,
+                    )
+                    self._upload_report(pptx_path)
+                    self._write_processed_index(file.name, pptx_path.name, processed_folder_id)
+                    self._append_audit_log(file.name, pptx_path.name)
+                    logger.info("Generated report: %s", pptx_path)
+
+                if self.supabase:
+                    self.supabase.insert(
+                        {
+                            "dataset_name": file.name,
+                            "schema_signature": analysis.schema_signature,
+                            "kpis": analysis.kpis,
+                            "top_products": analysis.top_products,
+                            "outliers": analysis.outliers,
+                        }
+                    )
                 self._with_retries(lambda: self.drive.move_file(file.id, processed_folder_id))
-                logger.info("Generated report: %s", pptx_path)
                 self.emailer.send(
                     subject=f"Data Agent: Report ready for {file.name}",
-                    body=f"Report generated: {pptx_path.name}",
+                    body=f"Report(s) generated for departments: {', '.join([d.name for d in departments])}",
                 )
                 registry.add({file.id})
             except Exception as exc:  # noqa: BLE001
@@ -154,7 +207,7 @@ class AgentPipeline:
             return pd.read_csv(io.BytesIO(data))
         return pd.read_excel(io.BytesIO(data))
 
-    def _build_presentation(self, analysis, filename: str, bullets, mapping) -> Path:
+    def _build_presentation(self, analysis, filename: str, bullets, mapping, department: str) -> Path:
         assets = fetch_brand_assets(
             self.drive,
             parse_drive_folder_id(self.config.brand_assets_drive_folder_url),
@@ -166,7 +219,7 @@ class AgentPipeline:
             logo_full_path=assets.logo_full_path,
             logo_symbol_path=assets.logo_symbol_path,
         )
-        output_name = f"{Path(filename).stem}_report.pptx"
+        output_name = f"{Path(filename).stem}_{department}_report.pptx"
         output_path = Path("output") / output_name
         return generator.build(
             analysis,
@@ -175,6 +228,7 @@ class AgentPipeline:
             mapping,
             report_source=filename,
             primary_font=self.config.brand_font_primary,
+            department_label=department,
         )
 
     def _upload_report(self, pptx_path: Path) -> None:

@@ -53,6 +53,7 @@ class PPTXGenerator:
         mapping: MappingResult,
         report_source: str,
         primary_font: str | None = None,
+        department_label: str | None = None,
     ) -> Path:
         if primary_font:
             self.primary_font = primary_font
@@ -61,7 +62,7 @@ class PPTXGenerator:
         prs = Presentation()
         prs.slide_width = self.slide_width
         prs.slide_height = self.slide_height
-        self._add_title_slide(prs, analysis)
+        self._add_title_slide(prs, analysis, department_label)
         self._add_kpi_summary_slide(prs, bullets)
         self._add_kpi_slide(prs, analysis)
         self._add_self_healing_slide(prs, analysis, mapping)
@@ -156,7 +157,7 @@ class PPTXGenerator:
             for run in paragraph.runs:
                 run.font.size = Pt(size)
 
-    def _add_title_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
+    def _add_title_slide(self, prs: Presentation, analysis: AnalysisResult, department_label: str | None) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
 
@@ -170,7 +171,8 @@ class PPTXGenerator:
 
         title_box = slide.shapes.add_textbox(self.margin, Inches(2.0), Inches(9.0), Inches(1.0))
         title_tf = title_box.text_frame
-        title_tf.text = f"{self.brand.name} Executive Summary"
+        dept = f"{department_label.title()} " if department_label else ""
+        title_tf.text = f"{self.brand.name} {dept}Executive Summary"
         title_tf.paragraphs[0].font.size = Pt(30)
         title_tf.paragraphs[0].font.bold = True
         self._apply_font(title_tf, size=30, bold=True)

@@ -16,38 +16,17 @@ class InsightGenerator:
     def __init__(self, llm_client: Optional[GeminiClient]) -> None:
         self.llm_client = llm_client
 
-    def generate_bullets(self, analysis: AnalysisResult) -> List[str]:
+    def generate_bullets(
+        self,
+        analysis: AnalysisResult,
+        prompt_override: Optional[str] = None,
+        previous_analysis: Optional[dict] = None,
+    ) -> List[str]:
         if not self.llm_client:
             return self._fallback_bullets(analysis)
 
         try:
-            prompt = (
-                "You are an executive analyst tasked with analyzing KPI data and identifying causal drivers of performance.\n\n"
-                "## Your Task\n"
-                "Analyze the provided KPI summary, top products, and outliers to identify root causes and patterns—not "
-                "descriptive summaries of what happened. Your analysis should reveal the WHY behind performance movements.\n\n"
-                "## Audience & Tone\n"
-                "Your audience includes C-suite executives, board members, domain experts (VP/Director level), investors, "
-                "and cross-functional leadership. Use a confident, action-oriented tone that signals clarity and readiness "
-                "to act. Avoid hedging language; be direct about causal relationships.\n\n"
-                "## Deliverable Requirements\n"
-                "Bullets:\n"
-                "- Each bullet must be a single sentence, maximum 50 words\n"
-                "- Focus exclusively on causal analysis: root drivers, interconnected factors, or systemic patterns that explain performance\n"
-                "- Avoid restating metrics; instead, explain what's driving the numbers\n"
-                "- Prioritize the most material insights first\n\n"
-                "Recommendations (exactly 3):\n"
-                "- Short, specific, and directly actionable based on your bullets\n"
-                "- Each should address a key finding and suggest concrete next steps\n"
-                "- Assume the reader will act on these immediately\n\n"
-                "## Input Data\n"
-                f"- KPI Summary: {analysis.kpis}\n"
-                f"- Top Products: {analysis.top_products}\n"
-                f"- Outliers: {analysis.outliers}\n\n"
-                "## Output Format (Strict JSON Only)\n"
-                "{\"bullets\": [\"bullet 1\", \"bullet 2\", \"bullet 3\"], \"recommendations\": [\"recommendation 1\", \"recommendation 2\", \"recommendation 3\"]}\n\n"
-                "Return ONLY valid JSON. No preamble, explanation, or additional text."
-            )
+            prompt = prompt_override or self._default_prompt(analysis, previous_analysis)
             text = self.llm_client.generate_text(prompt)
             bullets, recommendations = self._parse_bullets(text)
             bullets = self._validate_bullets(bullets)
@@ -57,6 +36,32 @@ class InsightGenerator:
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM insight generation failed; using fallback bullets. %s", exc)
             return self._fallback_bullets(analysis)
+
+    def _default_prompt(self, analysis: AnalysisResult, previous_analysis: Optional[dict]) -> str:
+        comparison = ""
+        if previous_analysis:
+            comparison = f"\n- Previous KPI Summary: {previous_analysis.get('kpis', {})}\n"
+        return (
+            "You are an executive analyst tasked with analyzing KPI data and identifying causal drivers of performance.\n\n"
+            "## Your Task\n"
+            "Analyze the provided KPI summary, top products, and outliers to identify root causes and patterns—not "
+            "descriptive summaries of what happened. Your analysis should reveal the WHY behind performance movements.\n\n"
+            "## Deliverable Requirements\n"
+            "Bullets:\n"
+            "- Each bullet must be a single sentence, maximum 50 words\n"
+            "- Focus exclusively on causal analysis\n"
+            "- Avoid restating metrics; instead, explain what's driving the numbers\n\n"
+            "Recommendations (exactly 3):\n"
+            "- Short, specific, and directly actionable\n\n"
+            "## Input Data\n"
+            f"- KPI Summary: {analysis.kpis}\n"
+            f"- Top Products: {analysis.top_products}\n"
+            f"- Outliers: {analysis.outliers}\n"
+            f"{comparison}\n"
+            "## Output Format (Strict JSON Only)\n"
+            "{\"bullets\": [\"bullet 1\", \"bullet 2\", \"bullet 3\"], \"recommendations\": [\"recommendation 1\", \"recommendation 2\", \"recommendation 3\"]}\n\n"
+            "Return ONLY valid JSON."
+        )
 
     def _parse_bullets(self, text: str) -> tuple[List[str], List[str]]:
         try:
