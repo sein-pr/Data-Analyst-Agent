@@ -8,14 +8,21 @@ from ..logger import get_logger
 logger = get_logger(__name__)
 
 
-def select_kpis(kpis: Dict[str, str], llm_client=None, limit: int = 6) -> List[str]:
+def select_kpis(
+    kpis: Dict[str, str],
+    llm_client=None,
+    limit: int = 6,
+    department: str | None = None,
+) -> List[str]:
     if not kpis:
         return []
     keys = list(kpis.keys())
     if not llm_client:
         return keys[:limit]
+    dept_hint = f"Department: {department}. " if department else ""
     prompt = (
         "You are an executive analyst. Select the most important KPIs to show on a dashboard.\n"
+        f"{dept_hint}"
         f"Return strict JSON: {{\"kpis\": [\"kpi1\", \"kpi2\"]}}. Limit {limit}.\n"
         f"Available KPIs: {keys}"
     )

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
@@ -38,12 +38,12 @@ def build_dashboard_sheet(
     ws.row_dimensions[2].height = 22
 
     # Colors
-    header_fill = PatternFill("solid", fgColor="0F766E")
-    nav_fill = PatternFill("solid", fgColor="0F172A")
-    nav_active_fill = PatternFill("solid", fgColor="115E59")
-    card_fill = PatternFill("solid", fgColor="F1F5F9")
-    card_accent_fill = PatternFill("solid", fgColor="E2E8F0")
-    footer_fill = PatternFill("solid", fgColor="0F766E")
+    header_fill = PatternFill("solid", fgColor="0B3B4C")
+    nav_fill = PatternFill("solid", fgColor="0B1F2A")
+    nav_active_fill = PatternFill("solid", fgColor="135A63")
+    card_fill = PatternFill("solid", fgColor="111827")
+    card_accent_fill = PatternFill("solid", fgColor="1F2937")
+    footer_fill = PatternFill("solid", fgColor="0B3B4C")
     white_font = Font(color="FFFFFF", bold=True)
 
     # Header
@@ -80,10 +80,10 @@ def build_dashboard_sheet(
     card_height = 2
     max_cards = 6
     border = Border(
-        left=Side(style="thin", color="CBD5E1"),
-        right=Side(style="thin", color="CBD5E1"),
-        top=Side(style="thin", color="CBD5E1"),
-        bottom=Side(style="thin", color="CBD5E1"),
+        left=Side(style="thin", color="334155"),
+        right=Side(style="thin", color="334155"),
+        top=Side(style="thin", color="334155"),
+        bottom=Side(style="thin", color="334155"),
     )
 
     for idx, (label, value) in enumerate(kpi_items[:max_cards]):
@@ -92,10 +92,9 @@ def build_dashboard_sheet(
         cell_range = f"{get_column_letter(c)}{r}:{get_column_letter(c+card_width-1)}{r+card_height-1}"
         ws.merge_cells(cell_range)
         cell = ws[f"{get_column_letter(c)}{r}"]
-        icon = _kpi_icon(label)
-        cell.value = f"{icon} {label}\n{value}"
+        cell.value = f"{label}\n{value}"
         cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        cell.font = Font(size=11, bold=True, color="0F172A")
+        cell.font = Font(size=11, bold=True, color="FFFFFF")
         for row_cells in ws[cell_range]:
             for cell_item in row_cells:
                 cell_item.fill = card_fill
@@ -103,18 +102,27 @@ def build_dashboard_sheet(
         # accent strip
         accent_cell = ws[f"{get_column_letter(c)}{r}"]
         accent_cell.fill = card_accent_fill
+        # icon image
+        icon_key = _kpi_icon_key(label)
+        icon_path = _get_icon_path(icon_key)
+        if icon_path:
+            img = XLImage(str(icon_path))
+            img.width = 20
+            img.height = 20
+            ws.add_image(img, f"{get_column_letter(c)}{r}")
 
     # KPI descriptions
     if kpi_descriptions:
         desc_start = 8
         ws.merge_cells("C8:L8")
         ws["C8"] = "KPI Highlights"
-        ws["C8"].font = Font(bold=True, size=12, color="0F172A")
+        ws["C8"].font = Font(bold=True, size=12, color="FFFFFF")
         for idx, (label, _) in enumerate(kpi_items[:3], start=1):
             row_idx = desc_start + idx
             ws.merge_cells(f"C{row_idx}:L{row_idx}")
             ws[f"C{row_idx}"] = f"{label}: {kpi_descriptions.get(label, '')}"
             ws[f"C{row_idx}"].alignment = Alignment(wrap_text=True)
+            ws[f"C{row_idx}"].font = Font(color="E2E8F0", size=10)
 
     # Charts area
     chart_row = 12
@@ -163,14 +171,14 @@ def build_dashboard_sheet(
 
 def _render_table(ws, start_row: int, start_col: int, title: str, headers, rows) -> None:
     title_cell = ws.cell(row=start_row, column=start_col, value=title)
-    title_cell.font = Font(bold=True, size=12, color="0F172A")
-    header_fill = PatternFill("solid", fgColor="0F766E")
+    title_cell.font = Font(bold=True, size=12, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="0B3B4C")
     header_font = Font(color="FFFFFF", bold=True)
     border = Border(
-        left=Side(style="thin", color="CBD5E1"),
-        right=Side(style="thin", color="CBD5E1"),
-        top=Side(style="thin", color="CBD5E1"),
-        bottom=Side(style="thin", color="CBD5E1"),
+        left=Side(style="thin", color="334155"),
+        right=Side(style="thin", color="334155"),
+        top=Side(style="thin", color="334155"),
+        bottom=Side(style="thin", color="334155"),
     )
     header_row = start_row + 1
     for idx, header in enumerate(headers, start=0):
@@ -184,23 +192,53 @@ def _render_table(ws, start_row: int, start_col: int, title: str, headers, rows)
             cell = ws.cell(row=header_row + r_idx, column=start_col + c_idx, value=value)
             cell.alignment = Alignment(horizontal="left", vertical="center")
             cell.border = border
+            cell.font = Font(color="E2E8F0")
 
 
-def _kpi_icon(label: str) -> str:
+def _kpi_icon_key(label: str) -> str:
     text = label.lower()
     if "revenue" in text:
-        return "💰"
+        return "revenue"
     if "margin" in text:
-        return "📈"
+        return "margin"
     if "cost" in text:
-        return "🧾"
+        return "cost"
     if "discount" in text:
-        return "🏷️"
+        return "discount"
     if "units" in text:
-        return "📦"
+        return "units"
     if "growth" in text:
-        return "🚀"
-    return "📊"
+        return "growth"
+    return "default"
+
+
+def _get_icon_path(key: str):
+    try:
+        from PIL import Image, ImageDraw
+    except Exception:
+        return None
+
+    icon_dir = Path("state/excel_icons")
+    icon_dir.mkdir(parents=True, exist_ok=True)
+    icon_path = icon_dir / f"{key}.png"
+    if icon_path.exists():
+        return icon_path
+
+    color_map = {
+        "revenue": "#22C55E",
+        "margin": "#38BDF8",
+        "cost": "#F97316",
+        "discount": "#F59E0B",
+        "units": "#A78BFA",
+        "growth": "#10B981",
+        "default": "#64748B",
+    }
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    fill = color_map.get(key, "#64748B")
+    draw.ellipse((4, 4, 60, 60), fill=fill)
+    img.save(icon_path)
+    return icon_path
 
 
 def _render_quickchart(visual: Dict[str, object], qc: QuickChartClient) -> bytes | None:
@@ -220,7 +258,13 @@ def _render_quickchart(visual: Dict[str, object], qc: QuickChartClient) -> bytes
     chart_type = visual.get("type", "bar")
     config = {
         "type": "bar" if chart_type == "donut" else chart_type,
-        "data": {"labels": labels, "datasets": [{"data": values}]},
-        "options": {"plugins": {"legend": {"display": False}}},
+        "data": {"labels": labels, "datasets": [{"data": values, "backgroundColor": "#38BDF8"}]},
+        "options": {
+            "plugins": {"legend": {"display": False}},
+            "scales": {
+                "x": {"ticks": {"color": "#E2E8F0"}, "grid": {"color": "#1F2937"}},
+                "y": {"ticks": {"color": "#E2E8F0"}, "grid": {"color": "#1F2937"}},
+            },
+        },
     }
-    return qc.render_chart(config, width=800, height=300, background="#F8FAFC")
+    return qc.render_chart(config, width=800, height=300, background="#0B1F2A")

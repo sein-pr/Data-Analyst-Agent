@@ -156,9 +156,6 @@ def run_excel_model(
     if dashboard_enabled and dashboard_context:
         try:
             kpis = dashboard_context.get("kpi", {})
-            kpi_keys = select_kpis(kpis, llm_client=llm_client, limit=6)
-            kpi_items = [(key, kpis.get(key, "")) for key in kpi_keys]
-            kpi_descriptions = describe_kpis(kpi_items, llm_client=llm_client)
             visuals = plan_visuals(
                 {
                     "monthly_revenue": dashboard_context.get("monthly_revenue", []),
@@ -182,6 +179,9 @@ def run_excel_model(
             nav_items = [f"Dashboard - {d.title()}" for d in (dashboard_departments or [])]
             build_dashboard_home(model.workbook, dashboard_departments or [dashboard_department or "Executive"])
             for dept in dashboard_departments or [dashboard_department or "Executive"]:
+                kpi_keys = select_kpis(kpis, llm_client=llm_client, limit=6, department=dept)
+                kpi_items = [(key, kpis.get(key, "")) for key in kpi_keys]
+                kpi_descriptions = describe_kpis(kpi_items, llm_client=llm_client)
                 sheet_name = f"Dashboard - {dept.title()}"
                 build_dashboard_sheet(
                     model.workbook,
