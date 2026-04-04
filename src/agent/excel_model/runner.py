@@ -44,8 +44,16 @@ class ExcelModelRunner:
             config_path = fallback
         raw = json.loads(config_path.read_text(encoding="utf-8"))
         model_path = str(raw.get("model_path", ""))
-        if model_path and not Path(model_path).is_absolute():
-            model_path = str((config_path.parent / model_path).resolve())
+        if model_path:
+            path_obj = Path(model_path)
+            if path_obj.is_absolute():
+                model_path = str(path_obj)
+            else:
+                # Prefer path relative to project root if it exists
+                if path_obj.exists():
+                    model_path = str(path_obj.resolve())
+                else:
+                    model_path = str((config_path.parent / path_obj).resolve())
         return ExcelModelConfig(
             model_path=model_path,
             sheet=raw.get("sheet"),
