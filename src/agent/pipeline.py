@@ -26,6 +26,8 @@ from .department_detector import detect_departments
 from .prompt_loader import PromptLoader
 from .supabase_store import SupabaseStore
 from .excel_model.runner import ExcelModelRunner
+from .excel_model.kpi_selector import select_kpis
+from .excel_model.visual_planner import plan_visuals
 
 logger = get_logger(__name__)
 
@@ -223,6 +225,16 @@ class AgentPipeline:
                         prompt_override=prompt,
                         previous_analysis=previous,
                     )
+                    selected_kpis = select_kpis(analysis.kpis, llm_client=self.llm_client, limit=6, department=dept.name)
+                    selected_visuals = plan_visuals(
+                        {
+                            "monthly_revenue": analysis.monthly_revenue,
+                            "top_products": analysis.top_products,
+                            "revenue_by_channel": analysis.revenue_by_channel,
+                            "revenue_by_region": analysis.revenue_by_region,
+                        },
+                        llm_client=self.llm_client,
+                    )
                     pptx_path = self._build_presentation(
                         analysis,
                         f"{dept.name}_{file.name}",
@@ -230,6 +242,8 @@ class AgentPipeline:
                         mapping,
                         department=dept.name,
                         previous_analysis=previous,
+                        selected_kpis=selected_kpis,
+                        selected_visuals=selected_visuals,
                     )
                     self._upload_report(pptx_path)
                     if excel_result and excel_result.get("dashboard_path"):
@@ -284,6 +298,8 @@ class AgentPipeline:
         mapping,
         department: str,
         previous_analysis: dict | None = None,
+        selected_kpis: list | None = None,
+        selected_visuals: list | None = None,
     ) -> Path:
         assets = fetch_brand_assets(
             self.drive,
@@ -307,6 +323,8 @@ class AgentPipeline:
             primary_font=self.config.brand_font_primary,
             department_label=department,
             previous_analysis=previous_analysis,
+            selected_kpis=selected_kpis,
+            selected_visuals=selected_visuals,
         )
 
     def _upload_report(self, pptx_path: Path) -> None:

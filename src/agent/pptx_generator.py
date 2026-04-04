@@ -55,6 +55,8 @@ class PPTXGenerator:
         primary_font: str | None = None,
         department_label: str | None = None,
         previous_analysis: dict | None = None,
+        selected_kpis: List[str] | None = None,
+        selected_visuals: List[dict] | None = None,
     ) -> Path:
         if primary_font:
             self.primary_font = primary_font
@@ -71,15 +73,33 @@ class PPTXGenerator:
         self._add_section_slide(prs, "Key Findings", sections.get("key_findings", []))
         self._add_section_slide(prs, "Insights & Interpretation", sections.get("insights_interpretation", []))
         self._add_section_slide(prs, "Department-Specific Analysis", sections.get("department_analysis", []))
-        self._add_kpi_slide(prs, analysis)
+        self._add_kpi_slide(prs, analysis, selected_kpis=selected_kpis, selected_visuals=selected_visuals)
         if previous_analysis:
             self._add_comparison_slide(prs, analysis, previous_analysis)
         self._add_section_slide(prs, "Variance / Comparative Analysis", sections.get("comparative_analysis", []))
         self._add_self_healing_slide(prs, analysis, mapping)
         if self._should_add_mapping_slide(mapping):
             self._add_mapping_detail_slide(prs, mapping)
-        if analysis.monthly_revenue:
+        if selected_visuals:
+            visual_ids = {v.get("id") for v in selected_visuals}
+        else:
+            visual_ids = set()
+        if analysis.monthly_revenue and ("monthly_revenue" in visual_ids or not selected_visuals):
             self._add_mom_trend_slide(prs, analysis)
+        if analysis.revenue_by_channel and ("revenue_by_channel" in visual_ids):
+            self._add_simple_bar_slide(
+                prs,
+                title="Revenue by Channel",
+                items=analysis.revenue_by_channel,
+                label_key="Channel",
+            )
+        if analysis.revenue_by_region and ("revenue_by_region" in visual_ids):
+            self._add_simple_bar_slide(
+                prs,
+                title="Revenue by Region",
+                items=analysis.revenue_by_region,
+                label_key="Region",
+            )
         self._add_data_quality_slide(prs, analysis)
         self._add_section_slide(prs, "Risks & Limitations", sections.get("risks_limitations", []))
         self._add_recommendations_slide(prs, analysis, sections.get("recommendations", []))
@@ -256,7 +276,13 @@ class PPTXGenerator:
             p.font.size = Pt(18)
         self._shrink_text_to_fit(tf, max_chars=700, base_size=18, min_size=14)
 
-    def _add_kpi_slide(self, prs: Presentation, analysis: AnalysisResult) -> None:
+    def _add_kpi_slide(
+        self,
+        prs: Presentation,
+        analysis: AnalysisResult,
+        selected_kpis: List[str] | None = None,
+        selected_visuals: List[dict] | None = None,
+    ) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         self._add_header_bar(slide)
         self._add_data_health_badge(slide, analysis)
@@ -268,8 +294,14 @@ class PPTXGenerator:
         title_tf.paragraphs[0].font.bold = True
         self._apply_font(title_tf, size=28, bold=True)
 
+        kpis_to_show = analysis.kpis
+        if selected_kpis:
+            kpis_to_show = {k: analysis.kpis.get(k, "") for k in selected_kpis if k in analysis.kpis}
+            if not kpis_to_show:
+                kpis_to_show = analysis.kpis
+
         kpi_table = slide.shapes.add_table(
-            rows=max(2, len(analysis.kpis) + 1),
+            rows=max(2, len(kpis_to_show) + 1),
             cols=2,
             left=self.margin,
             top=Inches(1.5),
@@ -280,15 +312,16 @@ class PPTXGenerator:
         kpi_table.cell(0, 1).text = "Value"
         self._style_table_header(kpi_table)
         row = 1
-        kpi_font_size = 18 if len(analysis.kpis) > 6 else 20
-        for key, value in analysis.kpis.items():
+        kpi_font_size = 18 if len(kpis_to_show) > 6 else 20
+        for key, value in kpis_to_show.items():
             kpi_table.cell(row, 0).text = key
             kpi_table.cell(row, 1).text = value
             self._apply_font(kpi_table.cell(row, 0).text_frame, size=kpi_font_size)
             self._apply_font(kpi_table.cell(row, 1).text_frame, size=kpi_font_size)
             row += 1
 
-        if analysis.top_products:
+        visual_ids = {v.get("id") for v in (selected_visuals or [])}
+        if analysis.top_products and (not selected_visuals or "top_products" in visual_ids):
             top_table = slide.shapes.add_table(
                 rows=len(analysis.top_products) + 1,
                 cols=2,
@@ -309,7 +342,8 @@ class PPTXGenerator:
                 self._apply_font(top_table.cell(idx, 0).text_frame, size=16)
                 self._apply_font(top_table.cell(idx, 1).text_frame, size=16)
         self._add_outliers_table(slide, analysis)
-        self._add_top_products_chart(slide, analysis)
+        if not selected_visuals or "top_products" in visual_ids:
+            self._add_top_products_chart(slide, analysis)
 
     def _add_comparison_slide(
         self, prs: Presentation, analysis: AnalysisResult, previous_analysis: dict
@@ -728,6 +762,63 @@ class PPTXGenerator:
         self._apply_font(tf, size=12, bold=True)
 
         self._add_slide_notes(slide, f"Data health badge: {status}")
+
+    def _add_simple_bar_slide(
+        self,
+        prs: Presentation,
+        title: str,
+        items: List[Dict[str, str]],
+        label_key: str,
+    ) -> None:
+        if not items:
+            return
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        self._add_header_bar(slide)
+        title_box = slide.shapes.add_textbox(self.margin, Inches(0.6), Inches(8.8), Inches(0.6))
+        title_tf = title_box.text_frame
+        title_tf.text = title
+        title_tf.paragraphs[0].font.size = Pt(28)
+        title_tf.paragraphs[0].font.bold = True
+        self._apply_font(title_tf, size=28, bold=True)
+
+        labels = [str(item.get(label_key, "")) for item in items]
+        values = []
+        for item in items:
+            raw = str(item.get("Revenue", "0")).replace(",", "")
+            try:
+                values.append(float(raw))
+            except ValueError:
+                values.append(0.0)
+
+        chart_config = {
+            "type": "bar",
+            "data": {
+                "labels": labels,
+                "datasets": [
+                    {
+                        "label": "Revenue",
+                        "data": values,
+                        "backgroundColor": self.brand.palette.secondary,
+                        "borderColor": self.brand.palette.primary,
+                        "borderWidth": 1,
+                    }
+                ],
+            },
+            "options": {"plugins": {"legend": {"display": False}}},
+        }
+
+        image = self.quickchart.render_chart(
+            chart_config, width=900, height=420, background=self.brand.palette.neutral
+        )
+        if image:
+            slide.shapes.add_picture(
+                io.BytesIO(image),
+                self.margin,
+                Inches(1.5),
+                width=Inches(9.0),
+                height=Inches(4.6),
+            )
+            self._add_slide_notes(slide, f"{title} chart rendered (QuickChart).")
 
     def _add_slide_notes(self, slide, note: str) -> None:
         notes = slide.notes_slide.notes_text_frame
