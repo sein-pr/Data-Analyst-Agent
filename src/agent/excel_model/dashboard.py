@@ -46,15 +46,23 @@ def build_dashboard_sheet(
     footer_fill = PatternFill("solid", fgColor="0B3B4C")
     white_font = Font(color="FFFFFF", bold=True)
 
-    # Header
-    ws.merge_cells("C1:L2")
+    # Header (avoid writing to non-anchor merged cells)
+    ws.merge_cells("C1:J2")
+    ws.merge_cells("K1:L2")
     ws["C1"] = f"{department.title()} Dashboard"
     ws["C1"].font = Font(size=18, bold=True, color="FFFFFF")
     ws["C1"].alignment = Alignment(vertical="center", horizontal="left")
-    for cell in ws["C1:L2"][0]:
+    ws["K1"] = datetime.utcnow().strftime("%Y-%m-%d")
+    ws["K1"].font = Font(color="FFFFFF", bold=True)
+    ws["K1"].alignment = Alignment(vertical="center", horizontal="right")
+    for cell in ws["C1:J2"][0]:
         cell.fill = header_fill
-    ws["K2"] = datetime.utcnow().strftime("%Y-%m-%d")
-    ws["K2"].font = Font(color="FFFFFF")
+    for cell in ws["C1:J2"][1]:
+        cell.fill = header_fill
+    for cell in ws["K1:L2"][0]:
+        cell.fill = header_fill
+    for cell in ws["K1:L2"][1]:
+        cell.fill = header_fill
 
     # Left nav
     ws.merge_cells("A1:B2")
