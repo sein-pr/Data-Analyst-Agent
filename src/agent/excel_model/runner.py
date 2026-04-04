@@ -11,6 +11,7 @@ from .injector import inject_inputs
 from .loader import load_model
 from .dashboard import build_dashboard_sheet
 from .kpi_selector import select_kpis
+from .table_planner import plan_tables
 from .visual_planner import plan_visuals
 from .utils import find_cell_refs, parse_output_spec, resolve_cell
 from ..logger import get_logger
@@ -26,6 +27,7 @@ class ExcelModelConfig:
     outputs: Dict[str, object]
     engine: str = "auto"
     dashboard_enabled: bool = True
+    dashboard_tables: bool = True
 
 
 class ExcelModelRunner:
@@ -50,6 +52,7 @@ class ExcelModelRunner:
             outputs=raw.get("outputs", {}),
             engine=raw.get("engine", "auto"),
             dashboard_enabled=raw.get("dashboard", {}).get("enabled", True),
+            dashboard_tables=raw.get("dashboard", {}).get("tables", True),
         )
 
     def run_for_department(
@@ -71,6 +74,7 @@ class ExcelModelRunner:
             sheet=config.sheet,
             engine=config.engine,
             dashboard_enabled=config.dashboard_enabled,
+            dashboard_tables=config.dashboard_tables,
             dashboard_department=department,
             dashboard_departments=departments or [department],
             dashboard_context=context,
@@ -86,6 +90,7 @@ def run_excel_model(
     sheet: Optional[str] = None,
     engine: str = "auto",
     dashboard_enabled: bool = True,
+    dashboard_tables: bool = True,
     dashboard_department: str | None = None,
     dashboard_departments: Optional[List[str]] = None,
     dashboard_context: Optional[Dict[str, Dict[str, object]]] = None,
@@ -114,6 +119,12 @@ def run_excel_model(
     except Exception as exc:  # noqa: BLE001
         result["errors"].append(f"input_error: {exc}")
         return result
+
+    if dashboard_context and dashboard_context.get("supabase"):
+        _write_supabase_snapshot(
+            model.workbook,
+            dashboard_context.get("supabase", {}),
+        )
 
     outputs_result: Dict[str, object] = {}
     try:
@@ -155,20 +166,36 @@ def run_excel_model(
                 },
                 llm_client=llm_client,
             )
+            tables = []
+            if dashboard_tables:
+                tables = plan_tables(
+                    {
+                        "top_products": dashboard_context.get("top_products", []),
+                        "outliers": dashboard_context.get("outliers", []),
+                        "revenue_by_channel": dashboard_context.get("revenue_by_channel", []),
+                        "revenue_by_region": dashboard_context.get("revenue_by_region", []),
+                    },
+                    llm_client=llm_client,
+                )
             nav_items = [f"Dashboard - {d.title()}" for d in (dashboard_departments or [])]
-            sheet_name = f"Dashboard - {dashboard_department.title()}" if dashboard_department else "Dashboard"
-            build_dashboard_sheet(
-                model.workbook,
-                sheet_name=sheet_name,
-                department=dashboard_department or "Executive",
-                kpi_items=kpi_items,
-                visuals=visuals,
-                nav_items=nav_items,
-            )
+            for dept in dashboard_departments or [dashboard_department or "Executive"]:
+                sheet_name = f"Dashboard - {dept.title()}"
+                build_dashboard_sheet(
+                    model.workbook,
+                    sheet_name=sheet_name,
+                    department=dept,
+                    kpi_items=kpi_items,
+                    visuals=visuals,
+                    nav_items=nav_items,
+                    tables=tables,
+                )
             output_dir = Path("output/excel_dashboards")
             output_dir.mkdir(parents=True, exist_ok=True)
             base_name = dataset_name or Path(model_path).stem
-            out_path = output_dir / f"{base_name}_{dashboard_department}_dashboard.xlsx"
+            if dashboard_departments and len(dashboard_departments) > 1:
+                out_path = output_dir / f"{base_name}_dashboard.xlsx"
+            else:
+                out_path = output_dir / f"{base_name}_{dashboard_department}_dashboard.xlsx"
             model.workbook.save(out_path)
             result["dashboard_path"] = str(out_path)
         except Exception as exc:  # noqa: BLE001
@@ -209,6 +236,21 @@ def resolve_inputs(inputs: Dict[str, object], context: Dict[str, Dict[str, objec
         else:
             resolved[cell_ref] = value
     return resolved
+
+
+def _write_supabase_snapshot(workbook, supabase_payload: Dict[str, object]) -> None:
+    sheet_name = "Supabase"
+    if sheet_name in workbook.sheetnames:
+        ws = workbook[sheet_name]
+        workbook.remove(ws)
+    ws = workbook.create_sheet(sheet_name)
+    ws["A1"] = "Key"
+    ws["B1"] = "Value"
+    row = 2
+    for key, value in supabase_payload.items():
+        ws[f"A{row}"] = str(key)
+        ws[f"B{row}"] = str(value)
+        row += 1
 
 
 def evaluate_formula_expression(workbook, sheet, expression: str):

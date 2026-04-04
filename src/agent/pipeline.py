@@ -140,6 +140,28 @@ class AgentPipeline:
                 if self.supabase:
                     previous = self.supabase.fetch_latest(analysis.schema_signature)
 
+                excel_result = None
+                if departments:
+                    context = {
+                        "kpi": analysis.kpis,
+                        "summary": analysis.summary,
+                        "data_quality": analysis.data_quality,
+                        "schema": analysis.schema_overview,
+                        "top_products": analysis.top_products,
+                        "monthly_revenue": analysis.monthly_revenue,
+                        "revenue_by_channel": analysis.revenue_by_channel,
+                        "revenue_by_region": analysis.revenue_by_region,
+                        "outliers": analysis.outliers,
+                        "supabase": previous or {},
+                    }
+                    excel_result = self.excel_models.run_for_department(
+                        departments[0].name,
+                        context,
+                        departments=[d.name for d in departments],
+                        dataset_name=Path(file.name).stem,
+                        llm_client=self.llm_client,
+                    )
+
                 for dept in departments:
                     context = {
                         "kpi": analysis.kpis,
@@ -151,13 +173,7 @@ class AgentPipeline:
                         "revenue_by_channel": analysis.revenue_by_channel,
                         "revenue_by_region": analysis.revenue_by_region,
                     }
-                    excel_result = self.excel_models.run_for_department(
-                        dept.name,
-                        context,
-                        departments=[d.name for d in departments],
-                        dataset_name=Path(file.name).stem,
-                        llm_client=self.llm_client,
-                    )
+                    context["supabase"] = previous or {}
                     dept_prompt = self.prompt_loader.load_department_prompt(dept.name)
                     pp_prompt = self.prompt_loader.load_powerpoint_prompt()
                     prompt = (
