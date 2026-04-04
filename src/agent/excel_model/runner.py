@@ -9,6 +9,9 @@ from typing import Dict, Optional
 from .extractor import extract_outputs
 from .injector import inject_inputs
 from .loader import load_model
+from .dashboard import build_dashboard_sheet
+from .kpi_selector import select_kpis
+from .visual_planner import plan_visuals
 from .utils import find_cell_refs, parse_output_spec, resolve_cell
 from ..logger import get_logger
 
@@ -22,6 +25,7 @@ class ExcelModelConfig:
     inputs: Dict[str, object]
     outputs: Dict[str, object]
     engine: str = "auto"
+    dashboard_enabled: bool = True
 
 
 class ExcelModelRunner:
@@ -45,10 +49,16 @@ class ExcelModelRunner:
             inputs=raw.get("inputs", {}),
             outputs=raw.get("outputs", {}),
             engine=raw.get("engine", "auto"),
+            dashboard_enabled=raw.get("dashboard", {}).get("enabled", True),
         )
 
     def run_for_department(
-        self, department: str, context: Dict[str, Dict[str, object]]
+        self,
+        department: str,
+        context: Dict[str, Dict[str, object]],
+        departments: Optional[List[str]] = None,
+        dataset_name: Optional[str] = None,
+        llm_client=None,
     ) -> Optional[Dict[str, object]]:
         config = self.load_config(department)
         if not config:
@@ -60,6 +70,12 @@ class ExcelModelRunner:
             outputs=config.outputs,
             sheet=config.sheet,
             engine=config.engine,
+            dashboard_enabled=config.dashboard_enabled,
+            dashboard_department=department,
+            dashboard_departments=departments or [department],
+            dashboard_context=context,
+            dataset_name=dataset_name,
+            llm_client=llm_client,
         )
 
 
@@ -69,6 +85,12 @@ def run_excel_model(
     outputs: Dict[str, object],
     sheet: Optional[str] = None,
     engine: str = "auto",
+    dashboard_enabled: bool = True,
+    dashboard_department: str | None = None,
+    dashboard_departments: Optional[List[str]] = None,
+    dashboard_context: Optional[Dict[str, Dict[str, object]]] = None,
+    dataset_name: Optional[str] = None,
+    llm_client=None,
 ) -> Dict[str, object]:
     result = {
         "status": "error",
@@ -77,6 +99,7 @@ def run_excel_model(
         "outputs": {},
         "insights_ready": False,
         "errors": [],
+        "dashboard_path": None,
     }
 
     try:
@@ -117,6 +140,40 @@ def run_excel_model(
     result["outputs"] = outputs_result
     result["status"] = "success" if outputs_result else "partial"
     result["insights_ready"] = bool(outputs_result)
+
+    if dashboard_enabled and dashboard_context:
+        try:
+            kpis = dashboard_context.get("kpi", {})
+            kpi_keys = select_kpis(kpis, llm_client=llm_client, limit=6)
+            kpi_items = [(key, kpis.get(key, "")) for key in kpi_keys]
+            visuals = plan_visuals(
+                {
+                    "monthly_revenue": dashboard_context.get("monthly_revenue", []),
+                    "top_products": dashboard_context.get("top_products", []),
+                    "revenue_by_channel": dashboard_context.get("revenue_by_channel", []),
+                    "revenue_by_region": dashboard_context.get("revenue_by_region", []),
+                },
+                llm_client=llm_client,
+            )
+            nav_items = [f"Dashboard - {d.title()}" for d in (dashboard_departments or [])]
+            sheet_name = f"Dashboard - {dashboard_department.title()}" if dashboard_department else "Dashboard"
+            build_dashboard_sheet(
+                model.workbook,
+                sheet_name=sheet_name,
+                department=dashboard_department or "Executive",
+                kpi_items=kpi_items,
+                visuals=visuals,
+                nav_items=nav_items,
+            )
+            output_dir = Path("output/excel_dashboards")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            base_name = dataset_name or Path(model_path).stem
+            out_path = output_dir / f"{base_name}_{dashboard_department}_dashboard.xlsx"
+            model.workbook.save(out_path)
+            result["dashboard_path"] = str(out_path)
+        except Exception as exc:  # noqa: BLE001
+            result["errors"].append(f"dashboard_error: {exc}")
+
     return result
 
 

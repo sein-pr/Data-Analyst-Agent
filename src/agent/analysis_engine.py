@@ -17,6 +17,8 @@ class AnalysisResult:
     outliers: List[Dict[str, str]]
     summary: Dict[str, str]
     monthly_revenue: List[Dict[str, str]]
+    revenue_by_channel: List[Dict[str, str]]
+    revenue_by_region: List[Dict[str, str]]
     data_quality: Dict[str, str]
     schema_overview: Dict[str, str]
     schema_signature: str
@@ -42,8 +44,20 @@ class AnalysisEngine:
         if "Margin" in df.columns:
             total_margin = df["Margin"].sum()
             kpis["Total Margin"] = f"{total_margin:,.2f}"
+        if {"Revenue", "Margin"}.issubset(df.columns) and df["Revenue"].sum() != 0:
+            kpis["Margin %"] = f"{(df['Margin'].sum() / df['Revenue'].sum()):.2%}"
+        if "Units" in df.columns:
+            kpis["Total Units"] = f"{df['Units'].sum():,.0f}"
+        if "Unit Price" in df.columns:
+            kpis["Avg Unit Price"] = f"{df['Unit Price'].mean():,.2f}"
+        if "Discount Rate" in df.columns:
+            kpis["Avg Discount Rate"] = f"{df['Discount Rate'].mean():.2%}"
+        if "Revenue" in df.columns and len(df) > 0:
+            kpis["Avg Order Value"] = f"{(df['Revenue'].sum() / len(df)):,.2f}"
 
         monthly_revenue: List[Dict[str, str]] = []
+        revenue_by_channel: List[Dict[str, str]] = []
+        revenue_by_region: List[Dict[str, str]] = []
         df = df.copy()
         if "Date" in df.columns:
             df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -85,6 +99,24 @@ class AnalysisEngine:
                     monthly_revenue.append(
                         {"Month": row["month"].strftime("%Y-%m"), "Revenue": f"{row['revenue']:,.2f}"}
                     )
+            if {"Revenue", "Channel"}.issubset(df.columns):
+                channel_df = con.execute(
+                    "SELECT Channel AS channel, SUM(Revenue) AS revenue "
+                    "FROM data GROUP BY 1 ORDER BY revenue DESC LIMIT 6"
+                ).df()
+                for _, row in channel_df.iterrows():
+                    revenue_by_channel.append(
+                        {"Channel": str(row["channel"]), "Revenue": f"{row['revenue']:,.2f}"}
+                    )
+            if {"Revenue", "Region"}.issubset(df.columns):
+                region_df = con.execute(
+                    "SELECT Region AS region, SUM(Revenue) AS revenue "
+                    "FROM data GROUP BY 1 ORDER BY revenue DESC LIMIT 6"
+                ).df()
+                for _, row in region_df.iterrows():
+                    revenue_by_region.append(
+                        {"Region": str(row["region"]), "Revenue": f"{row['revenue']:,.2f}"}
+                    )
             if {"Revenue", "Product Category"}.issubset(df.columns):
                 top_df = con.execute(
                     "SELECT \"Product Category\" AS category, SUM(Revenue) AS revenue "
@@ -121,6 +153,24 @@ class AnalysisEngine:
                     monthly_revenue.append(
                         {"Month": ts.strftime("%Y-%m"), "Revenue": f"{value:,.2f}"}
                     )
+            if {"Revenue", "Channel"}.issubset(df.columns):
+                grouped = (
+                    df.groupby("Channel")["Revenue"]
+                    .sum()
+                    .sort_values(ascending=False)
+                    .head(6)
+                )
+                for name, value in grouped.items():
+                    revenue_by_channel.append({"Channel": str(name), "Revenue": f"{value:,.2f}"})
+            if {"Revenue", "Region"}.issubset(df.columns):
+                grouped = (
+                    df.groupby("Region")["Revenue"]
+                    .sum()
+                    .sort_values(ascending=False)
+                    .head(6)
+                )
+                for name, value in grouped.items():
+                    revenue_by_region.append({"Region": str(name), "Revenue": f"{value:,.2f}"})
 
         if {"Revenue", "Product Category"}.issubset(df.columns) and not top_products:
             grouped = (
@@ -157,6 +207,8 @@ class AnalysisEngine:
             outliers=outliers,
             summary=summary,
             monthly_revenue=monthly_revenue,
+            revenue_by_channel=revenue_by_channel,
+            revenue_by_region=revenue_by_region,
             data_quality=data_quality,
             schema_overview=schema_overview,
             schema_signature=schema_signature,

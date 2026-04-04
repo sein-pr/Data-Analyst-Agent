@@ -146,8 +146,18 @@ class AgentPipeline:
                         "summary": analysis.summary,
                         "data_quality": analysis.data_quality,
                         "schema": analysis.schema_overview,
+                        "top_products": analysis.top_products,
+                        "monthly_revenue": analysis.monthly_revenue,
+                        "revenue_by_channel": analysis.revenue_by_channel,
+                        "revenue_by_region": analysis.revenue_by_region,
                     }
-                    excel_result = self.excel_models.run_for_department(dept.name, context)
+                    excel_result = self.excel_models.run_for_department(
+                        dept.name,
+                        context,
+                        departments=[d.name for d in departments],
+                        dataset_name=Path(file.name).stem,
+                        llm_client=self.llm_client,
+                    )
                     dept_prompt = self.prompt_loader.load_department_prompt(dept.name)
                     pp_prompt = self.prompt_loader.load_powerpoint_prompt()
                     prompt = (
@@ -206,6 +216,10 @@ class AgentPipeline:
                         previous_analysis=previous,
                     )
                     self._upload_report(pptx_path)
+                    if excel_result and excel_result.get("dashboard_path"):
+                        dashboard_path = Path(excel_result["dashboard_path"])
+                        if dashboard_path.exists():
+                            self._upload_report(dashboard_path)
                     self._write_processed_index(file.name, pptx_path.name, processed_folder_id)
                     self._append_audit_log(file.name, pptx_path.name)
                     logger.info("Generated report: %s", pptx_path)
