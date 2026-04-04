@@ -64,6 +64,11 @@ def plan_visuals(analysis_payload: Dict[str, object], llm_client=None) -> List[D
     prompt = (
         "You are a visual analytics planner. Select up to two visuals that best explain the data.\n"
         "Choose chart types from: bar, line, pie, donut, scatter.\n"
+        "STRICT RULES:\n"
+        "- Output ONLY JSON\n"
+        "- NO TEXT BEFORE/AFTER JSON\n"
+        "- Do NOT include markdown (no ```json)\n"
+        "- Do NOT include comments\n"
         "Return strict JSON in the form {\"charts\": [{\"id\": \"...\", \"type\": \"bar\"}]}\n"
         f"Candidates: {json.dumps(candidates)}"
     )
