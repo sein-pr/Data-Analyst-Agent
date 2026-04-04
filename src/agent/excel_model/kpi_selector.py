@@ -27,3 +27,23 @@ def select_kpis(kpis: Dict[str, str], llm_client=None, limit: int = 6) -> List[s
     except Exception as exc:  # noqa: BLE001
         logger.warning("KPI selection failed; using defaults. %s", exc)
         return keys[:limit]
+
+
+def describe_kpis(kpi_items: List[tuple[str, str]], llm_client=None) -> Dict[str, str]:
+    if not kpi_items:
+        return {}
+    if not llm_client:
+        return {name: "Key performance indicator for the dashboard." for name, _ in kpi_items}
+    prompt = (
+        "You are a business analyst. Write a short, executive-friendly description for each KPI.\n"
+        "Return strict JSON: {\"descriptions\": {\"KPI Name\": \"short description\"}}\n"
+        f"KPIs: {[name for name, _ in kpi_items]}"
+    )
+    try:
+        response = llm_client.generate_text(prompt)
+        data = json.loads(response)
+        descriptions = data.get("descriptions", {})
+        return {name: str(descriptions.get(name, "")) for name, _ in kpi_items}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("KPI description failed; using defaults. %s", exc)
+        return {name: "Key performance indicator for the dashboard." for name, _ in kpi_items}

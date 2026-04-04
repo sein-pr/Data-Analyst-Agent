@@ -10,7 +10,8 @@ from .extractor import extract_outputs
 from .injector import inject_inputs
 from .loader import load_model
 from .dashboard import build_dashboard_sheet
-from .kpi_selector import select_kpis
+from .home import build_dashboard_home
+from .kpi_selector import describe_kpis, select_kpis
 from .table_planner import plan_tables
 from .visual_planner import plan_visuals
 from .utils import find_cell_refs, parse_output_spec, resolve_cell
@@ -157,6 +158,7 @@ def run_excel_model(
             kpis = dashboard_context.get("kpi", {})
             kpi_keys = select_kpis(kpis, llm_client=llm_client, limit=6)
             kpi_items = [(key, kpis.get(key, "")) for key in kpi_keys]
+            kpi_descriptions = describe_kpis(kpi_items, llm_client=llm_client)
             visuals = plan_visuals(
                 {
                     "monthly_revenue": dashboard_context.get("monthly_revenue", []),
@@ -178,6 +180,7 @@ def run_excel_model(
                     llm_client=llm_client,
                 )
             nav_items = [f"Dashboard - {d.title()}" for d in (dashboard_departments or [])]
+            build_dashboard_home(model.workbook, dashboard_departments or [dashboard_department or "Executive"])
             for dept in dashboard_departments or [dashboard_department or "Executive"]:
                 sheet_name = f"Dashboard - {dept.title()}"
                 build_dashboard_sheet(
@@ -185,6 +188,7 @@ def run_excel_model(
                     sheet_name=sheet_name,
                     department=dept,
                     kpi_items=kpi_items,
+                    kpi_descriptions=kpi_descriptions,
                     visuals=visuals,
                     nav_items=nav_items,
                     tables=tables,
