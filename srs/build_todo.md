@@ -6,10 +6,11 @@ Last updated: 2026-04-15
 - [x] Reviewed updated `srs/Requirement.md` and aligned scope to true autonomous discovery.
 - [x] Confirmed LLM strategy is **Groq-first** (no Gemini dependency).
 - [x] Created this implementation tracker with phase checkpoints.
+- [x] Wired runtime client order to use Groq first with Gemini fallback only when available.
 
 ## Phase 1 - Discovery Foundation
-- [ ] Normalize `srs/Requirement.md` text encoding (remove mojibake and wrapper artifacts).
-- [ ] Refactor discovery flow to infer domain + KPI definitions from headers/sample rows.
+- [x] Normalize `srs/Requirement.md` text encoding (remove mojibake and wrapper artifacts).
+- [ ] Refactor discovery flow to infer domain + KPI definitions from headers and sample rows.
 - [ ] Enforce strict JSON schema for discovery output (`domain`, `kpis`, `cleaning_instructions`, `confidence`).
 - [ ] Add confidence guardrail and generate `_unanalyzable_error.json` when discovery fails.
 - [ ] Add schema fingerprint cache key (columns + sample hash + inferred dtypes).
@@ -29,7 +30,8 @@ Last updated: 2026-04-15
 - [ ] Build unified analysis summary JSON for insight/report layers.
 
 ## Phase 4 - LLM Insight Layer (Groq-first)
-- [ ] Upgrade insight prompt to why-driven executive bullets (4-6 bullets).
+- [ ] Update existing prompt files to work with the new build
+- [ ] Upgrade insight prompt to why-driven executive bullets (5-10 bullets).
 - [ ] Enforce JSON-only output and salvage valid JSON when response is noisy.
 - [ ] Add recommendations generator linked to discovered drivers.
 - [ ] Add retry/fallback strategy across configured Groq keys.

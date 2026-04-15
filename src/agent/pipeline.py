@@ -41,7 +41,8 @@ class AgentPipeline:
             service_account_json_path=config.service_account_json_path,
         )
         self.llm_client = self._build_llm_client()
-        self.healer = DataHealer(["Revenue", "Date", "Product Category"], llm_client=self.llm_client)
+        # True discovery mode: do not block processing on fixed required columns.
+        self.healer = DataHealer([], llm_client=self.llm_client)
         self.analysis_engine = AnalysisEngine()
         self.insights = InsightGenerator(self.llm_client)
         self.prompt_loader = PromptLoader()
@@ -56,12 +57,12 @@ class AgentPipeline:
         self.emailer = EmailNotifier.from_config(config)
         self.page_token_path = Path(config.change_page_token_path or "state/drive_page_token.txt")
 
-    def _build_llm_client(self) -> Optional[GeminiClient]:
+    def _build_llm_client(self) -> Optional[object]:
         clients = []
-        if self.config.gemini_api_keys:
-            clients.append(GeminiClient(self.config.gemini_api_keys, self.config.gemini_model))
         if self.config.groq_api_keys:
             clients.append(GroqClient(self.config.groq_api_keys, self.config.groq_model))
+        if self.config.gemini_api_keys:
+            clients.append(GeminiClient(self.config.gemini_api_keys, self.config.gemini_model))
         if not clients:
             logger.warning("No LLM API keys found; using heuristic mapping only.")
             return None

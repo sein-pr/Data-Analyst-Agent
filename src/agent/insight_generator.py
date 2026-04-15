@@ -6,14 +6,13 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel, ValidationError, field_validator
 
 from .analysis_engine import AnalysisResult
-from .gemini_client import GeminiClient
 from .logger import get_logger
 
 logger = get_logger(__name__)
 
 
 class InsightGenerator:
-    def __init__(self, llm_client: Optional[GeminiClient]) -> None:
+    def __init__(self, llm_client: Optional[object]) -> None:
         self.llm_client = llm_client
 
     def generate_sections(
