@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import io
 import json
+import random
+import time
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
+import httplib2
 from google.auth.transport.requests import Request
+from google_auth_httplib2 import AuthorizedHttp
 from google.oauth2 import credentials as oauth_credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -37,15 +41,26 @@ class DriveService:
         oauth_token_json: Optional[Dict[str, Any]] = None,
         oauth_client_json_path: Optional[str] = None,
         service_account_json_path: Optional[str] = None,
+        request_timeout_seconds: int = 300,
+        max_attempts: int = 6,
+        execute_retries: int = 5,
     ) -> None:
+        self._request_timeout_seconds = request_timeout_seconds
+        self._max_attempts = max_attempts
+        self._execute_retries = execute_retries
+        credentials = self._build_credentials(
+            oauth_token_json,
+            oauth_client_json_path,
+            service_account_json_path,
+        )
+        authed_http = AuthorizedHttp(
+            credentials,
+            http=httplib2.Http(timeout=self._request_timeout_seconds),
+        )
         self._service = build(
             "drive",
             "v3",
-            credentials=self._build_credentials(
-                oauth_token_json,
-                oauth_client_json_path,
-                service_account_json_path,
-            ),
+            http=authed_http,
             cache_discovery=False,
         )
 
@@ -82,21 +97,94 @@ class DriveService:
             "GOOGLE_TOKEN_JSON."
         )
 
-    @staticmethod
-    def _refresh_with_retries(creds, attempts: int = 3, delay_seconds: int = 2) -> None:
+    def _refresh_with_retries(self, creds) -> None:
+        base_request = Request()
+
+        def timeout_request(url, method="GET", body=None, headers=None, timeout=None, **kwargs):
+            return base_request(
+                url=url,
+                method=method,
+                body=body,
+                headers=headers,
+                timeout=self._request_timeout_seconds,
+                **kwargs,
+            )
+
         last_exc = None
-        for attempt in range(1, attempts + 1):
+        for attempt in range(1, self._max_attempts + 1):
             try:
-                creds.refresh(Request())
+                creds.refresh(timeout_request)
                 return
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
-                logger.warning("Token refresh failed (%s/%s): %s", attempt, attempts, exc)
-                import time
-
-                time.sleep(delay_seconds * attempt)
+                if not self._is_transient_error(exc) or attempt == self._max_attempts:
+                    break
+                delay = self._compute_backoff_delay(attempt)
+                logger.warning(
+                    "Token refresh failed (%s/%s). Retrying in %.1fs: %s",
+                    attempt,
+                    self._max_attempts,
+                    delay,
+                    exc,
+                )
+                time.sleep(delay)
         if last_exc:
             raise last_exc
+
+    def _execute(self, request_builder, op_name: str):
+        return self._with_retries(
+            lambda: request_builder.execute(num_retries=self._execute_retries),
+            op_name=op_name,
+        )
+
+    def _with_retries(self, fn: Callable[[], Any], op_name: str) -> Any:
+        last_exc = None
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                return fn()
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if not self._is_transient_error(exc) or attempt == self._max_attempts:
+                    break
+                delay = self._compute_backoff_delay(attempt)
+                logger.warning(
+                    "%s failed (%s/%s). Retrying in %.1fs: %s",
+                    op_name,
+                    attempt,
+                    self._max_attempts,
+                    delay,
+                    exc,
+                )
+                time.sleep(delay)
+        if last_exc:
+            raise last_exc
+        raise RuntimeError(f"{op_name} failed without a captured exception.")
+
+    @staticmethod
+    def _compute_backoff_delay(attempt: int) -> float:
+        base = min(60.0, float(2 ** attempt))
+        jitter = random.uniform(0.0, 0.75)
+        return base + jitter
+
+    @staticmethod
+    def _is_transient_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        transient_tokens = [
+            "timeout",
+            "timed out",
+            "connection reset",
+            "temporarily unavailable",
+            "ssl",
+            "winerror 10054",
+            "winerror 10060",
+            "too many requests",
+            "429",
+            "500",
+            "502",
+            "503",
+            "504",
+        ]
+        return any(token in text for token in transient_tokens)
 
     def list_files(
         self,
@@ -118,8 +206,8 @@ class DriveService:
                     fields="nextPageToken, files(id, name, mimeType, modifiedTime)",
                     pageToken=page_token,
                 )
-                .execute()
             )
+            response = self._execute(response, "Drive list_files")
             for item in response.get("files", []):
                 results.append(
                     DriveFile(
@@ -148,18 +236,27 @@ class DriveService:
         if existing:
             return existing[0].id
         metadata = {"name": name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]}
-        folder = self._service.files().create(body=metadata, fields="id").execute()
+        folder = self._execute(
+            self._service.files().create(body=metadata, fields="id"),
+            "Drive create folder",
+        )
         return folder["id"]
 
     def move_file(self, file_id: str, new_parent_id: str) -> None:
-        file = self._service.files().get(fileId=file_id, fields="parents").execute()
+        file = self._execute(
+            self._service.files().get(fileId=file_id, fields="parents"),
+            "Drive get file parents",
+        )
         previous_parents = ",".join(file.get("parents", []))
-        self._service.files().update(
-            fileId=file_id,
-            addParents=new_parent_id,
-            removeParents=previous_parents,
-            fields="id, parents",
-        ).execute()
+        self._execute(
+            self._service.files().update(
+                fileId=file_id,
+                addParents=new_parent_id,
+                removeParents=previous_parents,
+                fields="id, parents",
+            ),
+            "Drive move file",
+        )
 
     def download_file(self, file_id: str) -> bytes:
         request = self._service.files().get_media(fileId=file_id)
@@ -167,7 +264,10 @@ class DriveService:
         downloader = MediaIoBaseDownload(buffer, request)
         done = False
         while not done:
-            _, done = downloader.next_chunk()
+            _, done = self._with_retries(
+                lambda: downloader.next_chunk(),
+                op_name="Drive download chunk",
+            )
         return buffer.getvalue()
 
     def upload_file(
@@ -182,8 +282,8 @@ class DriveService:
         created = (
             self._service.files()
             .create(body=metadata, media_body=media, fields="id")
-            .execute()
         )
+        created = self._execute(created, "Drive upload file")
         return created["id"]
 
     def update_file_content(
@@ -193,12 +293,15 @@ class DriveService:
         updated = (
             self._service.files()
             .update(fileId=file_id, media_body=media, fields="id")
-            .execute()
         )
+        updated = self._execute(updated, "Drive update file")
         return updated["id"]
 
     def get_start_page_token(self) -> str:
-        response = self._service.changes().getStartPageToken().execute()
+        response = self._execute(
+            self._service.changes().getStartPageToken(),
+            "Drive get start page token",
+        )
         return response["startPageToken"]
 
     def watch_changes(
@@ -215,7 +318,16 @@ class DriveService:
         }
         if token:
             body["token"] = token
-        return self._service.changes().watch(pageToken=page_token, body=body).execute()
+        return self._execute(
+            self._service.changes().watch(pageToken=page_token, body=body),
+            "Drive watch changes",
+        )
 
     def list_changes(self, page_token: str) -> Dict[str, Any]:
-        return self._service.changes().list(pageToken=page_token, fields="newStartPageToken, changes(fileId, file(name, mimeType, parents), time)").execute()
+        return self._execute(
+            self._service.changes().list(
+                pageToken=page_token,
+                fields="newStartPageToken, changes(fileId, file(name, mimeType, parents), time)",
+            ),
+            "Drive list changes",
+        )
