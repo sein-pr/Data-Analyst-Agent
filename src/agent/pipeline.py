@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import time
 from pathlib import Path
 from typing import Optional
@@ -28,6 +29,7 @@ from .supabase_store import SupabaseStore
 from .excel_model.runner import ExcelModelRunner
 from .excel_model.kpi_selector import select_kpis
 from .excel_model.visual_planner import plan_visuals
+from .schema_discovery import SchemaDiscoveryService
 
 logger = get_logger(__name__)
 
@@ -45,6 +47,7 @@ class AgentPipeline:
         self.healer = DataHealer([], llm_client=self.llm_client)
         self.analysis_engine = AnalysisEngine()
         self.insights = InsightGenerator(self.llm_client)
+        self.discovery = SchemaDiscoveryService(self.llm_client)
         self.prompt_loader = PromptLoader()
         self.excel_models = ExcelModelRunner(Path(config.excel_model_config_dir or "srs/excel_models"))
         self.supabase = None
@@ -118,6 +121,27 @@ class AgentPipeline:
                 self._with_retries(lambda: self.drive.move_file(file.id, watch_result.processing_folder_id))
                 data = self._with_retries(lambda: self.drive.download_file(file.id))
                 df = self._load_dataframe(file.name, data)
+                discovery = self.discovery.discover(df)
+                if not discovery.is_confident:
+                    logger.error(
+                        "Dataset unanalyzable for %s. confidence=%s kpis=%s",
+                        file.name,
+                        discovery.confidence,
+                        len(discovery.kpis),
+                    )
+                    self._upload_unanalyzable_error(file.name, discovery)
+                    self._with_retries(lambda: self.drive.move_file(file.id, failed_folder_id))
+                    self.emailer.send(
+                        subject=f"Data Agent: Unanalyzable dataset {file.name}",
+                        body=(
+                            "Autonomous KPI discovery could not confidently infer "
+                            f"KPIs (confidence={discovery.confidence:.2f})."
+                        ),
+                    )
+                    continue
+                df, cleaning_warnings = self.discovery.apply_cleaning(df, discovery.cleaning_instructions)
+                if cleaning_warnings:
+                    logger.warning("Cleaning warnings for %s: %s", file.name, cleaning_warnings)
                 mapping = self.healer.map_columns(df.columns)
                 df = df.rename(columns=mapping.mapping)
                 if mapping.unmapped_required:
@@ -132,7 +156,11 @@ class AgentPipeline:
                         body=f"Missing required columns: {', '.join(mapping.unmapped_required)}",
                     )
                     continue
-                analysis = self.analysis_engine.analyze(df)
+                analysis = self.analysis_engine.analyze(
+                    df,
+                    discovered_kpis=discovery.kpis,
+                    domain=discovery.domain,
+                )
                 departments = detect_departments(df.columns.tolist())
                 if not departments:
                     logger.warning("No department match found; skipping report generation.")
@@ -260,6 +288,8 @@ class AgentPipeline:
                         {
                             "dataset_name": file.name,
                             "schema_signature": analysis.schema_signature,
+                            "domain": analysis.domain,
+                            "discovered_kpis": discovery.kpis,
                             "kpis": analysis.kpis,
                             "top_products": analysis.top_products,
                             "outliers": analysis.outliers,
@@ -344,6 +374,25 @@ class AgentPipeline:
             status_name,
             content,
             mime_type="text/plain",
+        )
+
+    def _upload_unanalyzable_error(self, filename: str, discovery) -> None:
+        error_name = f"{Path(filename).stem}_unanalyzable_error.json"
+        payload = {
+            "status": "unanalyzable",
+            "filename": filename,
+            "confidence": discovery.confidence,
+            "domain": discovery.domain,
+            "kpi_count": len(discovery.kpis),
+            "schema_fingerprint": discovery.schema_fingerprint,
+            "cache_hit": discovery.cache_hit,
+            "message": "KPI discovery returned low confidence or empty KPI definitions.",
+        }
+        self.drive.upload_file(
+            self.config.reports_output_drive_folder_id,
+            error_name,
+            json.dumps(payload, indent=2).encode("utf-8"),
+            mime_type="application/json",
         )
 
     def _with_retries(self, fn, attempts: int = 3, delay_seconds: int = 2):

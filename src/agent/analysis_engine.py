@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import pandas as pd
 
@@ -12,7 +12,9 @@ logger = get_logger(__name__)
 
 @dataclass
 class AnalysisResult:
+    domain: str
     kpis: Dict[str, str]
+    discovered_kpis: List[Dict[str, Any]]
     top_products: List[Dict[str, str]]
     outliers: List[Dict[str, str]]
     summary: Dict[str, str]
@@ -25,8 +27,16 @@ class AnalysisResult:
 
 
 class AnalysisEngine:
-    def analyze(self, df: pd.DataFrame) -> AnalysisResult:
+    def analyze(
+        self,
+        df: pd.DataFrame,
+        discovered_kpis: List[Dict[str, Any]] | None = None,
+        domain: str | None = None,
+    ) -> AnalysisResult:
         kpis: Dict[str, str] = {}
+        discovered_kpis = discovered_kpis or []
+        if discovered_kpis:
+            kpis.update(self._compute_discovered_kpis(df, discovered_kpis))
         top_products: List[Dict[str, str]] = []
         outliers: List[Dict[str, str]] = []
 
@@ -202,7 +212,9 @@ class AnalysisEngine:
             "outlier_count": str(len(outliers)),
         }
         return AnalysisResult(
+            domain=domain or "Unknown",
             kpis=kpis,
+            discovered_kpis=discovered_kpis,
             top_products=top_products,
             outliers=outliers,
             summary=summary,
@@ -213,6 +225,60 @@ class AnalysisEngine:
             schema_overview=schema_overview,
             schema_signature=schema_signature,
         )
+
+    def _compute_discovered_kpis(
+        self,
+        df: pd.DataFrame,
+        discovered_kpis: List[Dict[str, Any]],
+    ) -> Dict[str, str]:
+        computed: Dict[str, str] = {}
+        col_index = {str(c).strip().lower(): str(c) for c in df.columns}
+        for kpi in discovered_kpis:
+            name = str(kpi.get("name", "")).strip()
+            aggregation = str(kpi.get("aggregation", "")).strip().lower()
+            raw_cols = kpi.get("columns", [])
+            if isinstance(raw_cols, str):
+                raw_cols = [raw_cols]
+            columns = [col_index.get(str(c).strip().lower(), "") for c in raw_cols]
+            columns = [c for c in columns if c]
+            if not name or not aggregation or not columns:
+                continue
+            try:
+                value = self._aggregate(df, columns, aggregation)
+                computed[name] = self._format_value(value, aggregation)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to compute discovered KPI '%s': %s", name, exc)
+                computed[name] = "null"
+        return computed
+
+    def _aggregate(self, df: pd.DataFrame, columns: List[str], aggregation: str) -> float:
+        series = pd.to_numeric(df[columns[0]], errors="coerce")
+        if aggregation in {"sum", "total"}:
+            return float(series.sum(skipna=True))
+        if aggregation in {"avg", "mean"}:
+            return float(series.mean(skipna=True))
+        if aggregation == "count":
+            return float(series.count())
+        if aggregation == "count_distinct":
+            return float(df[columns[0]].nunique(dropna=True))
+        if aggregation == "min":
+            return float(series.min(skipna=True))
+        if aggregation == "max":
+            return float(series.max(skipna=True))
+        if aggregation == "ratio" and len(columns) >= 2:
+            numerator = pd.to_numeric(df[columns[0]], errors="coerce").sum(skipna=True)
+            denominator = pd.to_numeric(df[columns[1]], errors="coerce").sum(skipna=True)
+            if float(denominator) == 0.0:
+                return 0.0
+            return float(numerator / denominator)
+        return float(series.sum(skipna=True))
+
+    def _format_value(self, value: float, aggregation: str) -> str:
+        if aggregation in {"count", "count_distinct"}:
+            return f"{int(round(value)):,.0f}"
+        if aggregation == "ratio":
+            return f"{value:.2%}"
+        return f"{value:,.2f}"
 
     def _compute_data_quality(self, df: pd.DataFrame) -> Dict[str, str]:
         total_rows = len(df)

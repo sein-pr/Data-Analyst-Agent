@@ -10,17 +10,17 @@ Last updated: 2026-04-15
 
 ## Phase 1 - Discovery Foundation
 - [x] Normalize `srs/Requirement.md` text encoding (remove mojibake and wrapper artifacts).
-- [ ] Refactor discovery flow to infer domain + KPI definitions from headers and sample rows.
-- [ ] Enforce strict JSON schema for discovery output (`domain`, `kpis`, `cleaning_instructions`, `confidence`).
-- [ ] Add confidence guardrail and generate `_unanalyzable_error.json` when discovery fails.
-- [ ] Add schema fingerprint cache key (columns + sample hash + inferred dtypes).
-- [ ] Persist/reuse cached discovery definitions to avoid repeated LLM calls.
+- [x] Refactor discovery flow to infer domain + KPI definitions from headers and sample rows.
+- [x] Enforce strict JSON schema for discovery output (`domain`, `kpis`, `cleaning_instructions`, `confidence`).
+- [x] Add confidence guardrail and generate `_unanalyzable_error.json` when discovery fails.
+- [x] Add schema fingerprint cache key (columns + sample hash + inferred dtypes).
+- [x] Persist/reuse cached discovery definitions to avoid repeated LLM calls.
 
 ## Phase 2 - Autonomous Cleaning + KPI Engine
-- [ ] Implement semantic cleaning runner driven by LLM instructions.
-- [ ] Add safe fallback cleaning (type coercion, null handling, date parsing fallback).
-- [ ] Build generic KPI computation engine from discovered KPI formulas/aggregations.
-- [ ] Handle KPI calculation errors as `null` without pipeline crash.
+- [x] Implement semantic cleaning runner driven by LLM instructions.
+- [x] Add safe fallback cleaning (type coercion, null handling, date parsing fallback).
+- [x] Build generic KPI computation engine from discovered KPI formulas/aggregations.
+- [x] Handle KPI calculation errors as `null` without pipeline crash.
 
 ## Phase 3 - Adaptive Analysis
 - [ ] Auto-detect time context and compute period-over-period metrics when possible.
