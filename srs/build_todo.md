@@ -37,11 +37,11 @@ Last updated: 2026-04-15
 - [ ] Add retry/fallback strategy across configured Groq keys.
 
 ## Phase 5 - Dynamic Reporting
-- [ ] Replace fixed report assumptions with dynamic, discovered KPI sections.
-- [ ] Make chart selection rule-based + AI-assisted (trend/bar/histogram/scatter/pie).
-- [ ] Ensure PPTX slides are generated from discovered domain narrative.
+- [x] Replace fixed report assumptions with dynamic, discovered KPI sections.
+- [x] Make chart selection rule-based + AI-assisted (trend/bar/histogram/scatter/pie).
+- [x] Ensure Google Slides reports are generated from discovered domain narrative.
 - [ ] Ensure dashboard sheets are generated conditionally based on available structures.
-- [ ] Apply brand rules when `srs/brand_guideline.md` exists; fallback to clean minimal theme.
+- [x] Apply brand rules when `srs/brand_guideline.md` exists; fallback to clean minimal theme.
 
 ## Phase 6 - Reliability + Operations
 - [x] Strengthen structured logging for each phase and failure mode.
@@ -54,5 +54,5 @@ Last updated: 2026-04-15
 - [ ] Any well-formed CSV/XLSX can be analyzed without manual column mapping.
 - [ ] Domain and KPI discovery are autonomous and cached.
 - [ ] Insights are executive-ready, causal, and JSON-safe.
-- [ ] PPTX + Excel outputs are readable, branded, and non-overlapping.
+- [ ] Google Slides + Excel outputs are readable, branded, and non-overlapping.
 - [ ] Errors are explicit, recoverable, and never silent.

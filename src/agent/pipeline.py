@@ -20,7 +20,6 @@ from .groq_client import GroqClient
 from .llm_router import LLMRouter
 from .insight_generator import InsightGenerator
 from .logger import get_logger
-from .pptx_generator import PPTXGenerator
 from .processed_registry import ProcessedRegistry
 from .watcher import mark_processed, watch_folder
 from .department_detector import detect_departments
@@ -30,6 +29,7 @@ from .excel_model.runner import ExcelModelRunner
 from .excel_model.kpi_selector import select_kpis
 from .excel_model.visual_planner import plan_visuals
 from .schema_discovery import SchemaDiscoveryService
+from .google_slides_generator import GoogleSlidesGenerator
 
 logger = get_logger(__name__)
 
@@ -266,24 +266,22 @@ class AgentPipeline:
                         },
                         llm_client=self.llm_client,
                     )
-                    pptx_path = self._build_presentation(
+                    slides_info = self._build_slides_report(
                         analysis,
                         f"{dept.name}_{file.name}",
                         sections,
-                        mapping,
                         department=dept.name,
-                        previous_analysis=previous,
                         selected_kpis=selected_kpis,
                         selected_visuals=selected_visuals,
                     )
-                    self._upload_report(pptx_path)
                     if excel_result and excel_result.get("dashboard_path"):
                         dashboard_path = Path(excel_result["dashboard_path"])
                         if dashboard_path.exists():
                             self._upload_report(dashboard_path)
-                    self._write_processed_index(file.name, pptx_path.name, processed_folder_id)
-                    self._append_audit_log(file.name, pptx_path.name)
-                    logger.info("Generated report: %s", pptx_path)
+                    report_ref = f"{slides_info.get('title', 'Google Slides')} | {slides_info.get('url', '')}"
+                    self._write_processed_index(file.name, report_ref, processed_folder_id)
+                    self._append_audit_log(file.name, slides_info.get("url", ""))
+                    logger.info("Generated Google Slides report: %s", slides_info.get("url"))
 
                 if self.supabase:
                     self.supabase.insert(
@@ -323,39 +321,32 @@ class AgentPipeline:
             return pd.read_csv(io.BytesIO(data))
         return pd.read_excel(io.BytesIO(data))
 
-    def _build_presentation(
+    def _build_slides_report(
         self,
         analysis,
         filename: str,
         sections: dict,
-        mapping,
         department: str,
-        previous_analysis: dict | None = None,
         selected_kpis: list | None = None,
         selected_visuals: list | None = None,
-    ) -> Path:
+    ) -> dict:
         assets = fetch_brand_assets(
             self.drive,
             parse_drive_folder_id(self.config.brand_assets_drive_folder_url),
             Path("state/brand_assets"),
         )
         brand = load_or_default_brand(assets.guideline_path)
-        generator = PPTXGenerator(
-            brand,
-            logo_full_path=assets.logo_full_path,
-            logo_symbol_path=assets.logo_symbol_path,
+        generator = GoogleSlidesGenerator(
+            drive=self.drive,
+            brand=brand,
+            llm_client=self.llm_client,
         )
-        output_name = f"{Path(filename).stem}_{department}_report.pptx"
-        output_path = Path("output") / output_name
         return generator.build(
-            analysis,
-            output_path,
-            sections,
-            mapping,
+            analysis=analysis,
+            sections=sections,
             report_source=filename,
-            primary_font=self.config.brand_font_primary,
-            department_label=department,
-            previous_analysis=previous_analysis,
+            department=department,
+            output_folder_id=self.config.reports_output_drive_folder_id,
             selected_kpis=selected_kpis,
             selected_visuals=selected_visuals,
         )
@@ -410,8 +401,8 @@ class AgentPipeline:
             raise last_exc
         raise RuntimeError("Retry helper failed with unknown error.")
 
-    def _write_processed_index(self, source_name: str, report_name: str, folder_id: str) -> None:
-        content = f"Source: {source_name}\nReport: {report_name}\n"
+    def _write_processed_index(self, source_name: str, report_reference: str, folder_id: str) -> None:
+        content = f"Source: {source_name}\nReport: {report_reference}\n"
         self.drive.upload_file(
             folder_id,
             f"{Path(source_name).stem}_processed.txt",
@@ -419,10 +410,10 @@ class AgentPipeline:
             mime_type="text/plain",
         )
 
-    def _append_audit_log(self, source_name: str, report_name: str) -> None:
+    def _append_audit_log(self, source_name: str, report_reference: str) -> None:
         log_name = "processed_audit_log.csv"
-        header = "timestamp,source_file,report_file\n"
-        line = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())},{source_name},{report_name}\n"
+        header = "timestamp,source_file,report_reference\n"
+        line = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())},{source_name},{report_reference}\n"
         existing = self.drive.find_file_by_name(self.config.reports_output_drive_folder_id, log_name)
         if existing:
             current = self.drive.download_file(existing.id).decode("utf-8")

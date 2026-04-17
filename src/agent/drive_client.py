@@ -63,6 +63,12 @@ class DriveService:
             http=authed_http,
             cache_discovery=False,
         )
+        self._slides_service = build(
+            "slides",
+            "v1",
+            http=authed_http,
+            cache_discovery=False,
+        )
 
     def _build_credentials(
         self,
@@ -330,4 +336,30 @@ class DriveService:
                 fields="newStartPageToken, changes(fileId, file(name, mimeType, parents), time)",
             ),
             "Drive list changes",
+        )
+
+    def create_presentation(self, title: str) -> Dict[str, Any]:
+        created = self._execute(
+            self._slides_service.presentations().create(body={"title": title}),
+            "Slides create presentation",
+        )
+        return {
+            "id": created["presentationId"],
+            "title": created.get("title", title),
+            "url": f"https://docs.google.com/presentation/d/{created['presentationId']}/edit",
+        }
+
+    def slides_batch_update(self, presentation_id: str, requests: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return self._execute(
+            self._slides_service.presentations().batchUpdate(
+                presentationId=presentation_id,
+                body={"requests": requests},
+            ),
+            "Slides batch update",
+        )
+
+    def get_presentation(self, presentation_id: str) -> Dict[str, Any]:
+        return self._execute(
+            self._slides_service.presentations().get(presentationId=presentation_id),
+            "Slides get presentation",
         )
