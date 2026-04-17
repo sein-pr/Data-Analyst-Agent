@@ -56,6 +56,8 @@ class AgentPipeline:
                 config.supabase_url,
                 config.supabase_key,
                 table=config.supabase_table or "analysis_history",
+                db_password=config.supabase_password,
+                allow_dynamic_columns=config.supabase_allow_dynamic_columns,
             )
         self.emailer = EmailNotifier.from_config(config)
         self.page_token_path = Path(config.change_page_token_path or "state/drive_page_token.txt")

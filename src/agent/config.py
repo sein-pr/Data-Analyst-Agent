@@ -34,6 +34,8 @@ class EnvConfig:
     supabase_url: Optional[str]
     supabase_key: Optional[str]
     supabase_table: Optional[str]
+    supabase_password: Optional[str]
+    supabase_allow_dynamic_columns: bool
     groq_api_keys: List[str]
     groq_model: str
 
@@ -76,6 +78,8 @@ def load_config() -> EnvConfig:
         supabase_url=os.getenv("SUPABASE_PROJECT_URL"),
         supabase_key=os.getenv("SUPABASE_PUBLISHABLE_KEY"),
         supabase_table=os.getenv("SUPABASE_TABLE"),
+        supabase_password=os.getenv("SUPABASE_PASSWORD"),
+        supabase_allow_dynamic_columns=os.getenv("SUPABASE_ALLOW_DYNAMIC_COLUMNS", "true").lower() == "true",
         modal_token_id=os.getenv("MODAL_TOKEN_ID"),
         modal_token_secret=os.getenv("MODAL_TOKEN_SECRET"),
         google_oauth_client_json_path=os.getenv("GOOGLE_OAUTH_CLIENT_JSON_PATH"),

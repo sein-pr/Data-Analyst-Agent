@@ -44,9 +44,9 @@ Last updated: 2026-04-15
 - [ ] Apply brand rules when `srs/brand_guideline.md` exists; fallback to clean minimal theme.
 
 ## Phase 6 - Reliability + Operations
-- [ ] Strengthen structured logging for each phase and failure mode.
+- [x] Strengthen structured logging for each phase and failure mode.
 - [ ] Ensure Drive folder handling for `/processing`, `/processed`, `/failed` remains consistent.
-- [ ] Validate Supabase history integration for schema-aware comparisons.
+- [x] Validate Supabase history integration for schema-aware comparisons.
 - [ ] Verify Modal scheduled/manual runs for full pipeline.
 - [ ] Add end-to-end test checklist for at least 3 different dataset domains.
 
