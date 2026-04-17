@@ -201,7 +201,7 @@ def run_excel_model(
                     nav_items=nav_items,
                     tables=tables,
                 )
-            output_dir = Path("output/excel_dashboards")
+            output_dir = Path("state/excel_dashboards")
             output_dir.mkdir(parents=True, exist_ok=True)
             base_name = dataset_name or Path(model_path).stem
             if dashboard_departments and len(dashboard_departments) > 1:

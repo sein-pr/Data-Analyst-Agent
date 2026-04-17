@@ -292,6 +292,33 @@ class DriveService:
         created = self._execute(created, "Drive upload file")
         return created["id"]
 
+    def upload_xlsx_as_google_sheet(
+        self,
+        folder_id: str,
+        filename: str,
+        content: bytes,
+    ) -> Dict[str, str]:
+        media = MediaIoBaseUpload(
+            io.BytesIO(content),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            resumable=False,
+        )
+        metadata = {
+            "name": filename,
+            "parents": [folder_id],
+            "mimeType": "application/vnd.google-apps.spreadsheet",
+        }
+        created = self._execute(
+            self._service.files().create(body=metadata, media_body=media, fields="id,name"),
+            "Drive upload xlsx as google sheet",
+        )
+        sheet_id = created["id"]
+        return {
+            "id": sheet_id,
+            "name": created.get("name", filename),
+            "url": f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit",
+        }
+
     def update_file_content(
         self, file_id: str, content: bytes, mime_type: str = "application/json"
     ) -> str:

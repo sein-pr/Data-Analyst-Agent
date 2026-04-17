@@ -277,7 +277,9 @@ class AgentPipeline:
                     if excel_result and excel_result.get("dashboard_path"):
                         dashboard_path = Path(excel_result["dashboard_path"])
                         if dashboard_path.exists():
-                            self._upload_report(dashboard_path)
+                            sheet_info = self._upload_excel_as_sheet(dashboard_path)
+                            if sheet_info.get("url"):
+                                self._append_audit_log(file.name, sheet_info["url"])
                     report_ref = f"{slides_info.get('title', 'Google Slides')} | {slides_info.get('url', '')}"
                     self._write_processed_index(file.name, report_ref, processed_folder_id)
                     self._append_audit_log(file.name, slides_info.get("url", ""))
@@ -356,6 +358,15 @@ class AgentPipeline:
         self.drive.upload_file(
             self.config.reports_output_drive_folder_id,
             pptx_path.name,
+            content,
+        )
+
+    def _upload_excel_as_sheet(self, xlsx_path: Path) -> dict:
+        content = xlsx_path.read_bytes()
+        sheet_name = f"{xlsx_path.stem}_sheet"
+        return self.drive.upload_xlsx_as_google_sheet(
+            self.config.reports_output_drive_folder_id,
+            sheet_name,
             content,
         )
 
