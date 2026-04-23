@@ -268,8 +268,11 @@ class AgentPipeline:
                             "top_products": analysis.top_products,
                             "revenue_by_channel": analysis.revenue_by_channel,
                             "revenue_by_region": analysis.revenue_by_region,
+                            "outliers": analysis.outliers,
                         },
                         llm_client=self.llm_client,
+                        department=dept.name,
+                        limit=3,
                     )
                     slides_info = self._build_slides_report(
                         analysis,

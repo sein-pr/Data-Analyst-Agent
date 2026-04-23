@@ -33,7 +33,7 @@ def plan_report_layout(
         department=department,
     )
     if not llm_client:
-        return _fallback_plan(candidates)
+        return _fallback_plan(candidates, department=department)
 
     prompt = (
         "You are a presentation layout planner.\n"
@@ -83,7 +83,7 @@ def plan_report_layout(
             return validated
     except Exception as exc:  # noqa: BLE001
         logger.warning("Report layout planner failed; using fallback. %s", exc)
-    return _fallback_plan(candidates)
+    return _fallback_plan(candidates, department=department)
 
 
 def _build_candidates(
@@ -177,23 +177,89 @@ def _build_candidates(
     return candidates
 
 
-def _fallback_plan(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _fallback_plan(candidates: List[Dict[str, Any]], *, department: str) -> List[Dict[str, Any]]:
     by_kind: Dict[str, List[Dict[str, Any]]] = {}
     for c in candidates:
         by_kind.setdefault(c["kind"], []).append(c)
 
+    dept = (department or "executive").strip().lower()
+    chart_priority = {
+        "finance": ["chart_monthly_revenue", "chart_top_products", "chart_revenue_by_region", "chart_revenue_by_channel"],
+        "marketing": ["chart_revenue_by_channel", "chart_monthly_revenue", "chart_top_products", "chart_revenue_by_region"],
+        "sales": ["chart_top_products", "chart_monthly_revenue", "chart_revenue_by_region", "chart_revenue_by_channel"],
+        "executive": ["chart_monthly_revenue", "chart_top_products", "chart_revenue_by_channel", "chart_revenue_by_region"],
+    }
+    table_priority = {
+        "finance": ["table_outliers", "table_top_products", "table_revenue_by_region", "table_revenue_by_channel"],
+        "marketing": ["table_revenue_by_channel", "table_top_products", "table_revenue_by_region", "table_outliers"],
+        "sales": ["table_top_products", "table_revenue_by_region", "table_revenue_by_channel", "table_outliers"],
+        "executive": ["table_top_products", "table_outliers", "table_revenue_by_channel", "table_revenue_by_region"],
+    }
+    by_id = {str(c.get("id", "")): c for c in candidates}
+
     plan: List[Dict[str, Any]] = []
     if by_kind.get("title"):
         plan.append(by_kind["title"][0])
+
+    # Lead with narrative before KPI tiles so decks don't all look the same.
+    for cid in ["bullets_executive_summary", "bullets_key_findings"]:
+        if cid in by_id:
+            plan.append(by_id[cid])
+            break
+
     if by_kind.get("kpi_cards"):
         plan.append(by_kind["kpi_cards"][0])
-    # Pick up to 2 different charts
-    plan.extend(by_kind.get("chart", [])[:2])
-    # Pick one high-value table
-    if by_kind.get("table"):
+
+    # Pick up to 3 department-prioritized charts
+    added_chart_ids = set()
+    for cid in chart_priority.get(dept, chart_priority["executive"]):
+        if cid in by_id and cid not in added_chart_ids:
+            plan.append(by_id[cid])
+            added_chart_ids.add(cid)
+        if len(added_chart_ids) >= 3:
+            break
+    if len(added_chart_ids) < 2:
+        for c in by_kind.get("chart", []):
+            cid = str(c.get("id", ""))
+            if cid in added_chart_ids:
+                continue
+            plan.append(c)
+            added_chart_ids.add(cid)
+            if len(added_chart_ids) >= 3:
+                break
+
+    # Pick one table by department intent
+    picked_table = False
+    for cid in table_priority.get(dept, table_priority["executive"]):
+        if cid in by_id:
+            plan.append(by_id[cid])
+            picked_table = True
+            break
+    if not picked_table and by_kind.get("table"):
         plan.append(by_kind["table"][0])
-    # Add narrative slides last
-    plan.extend(by_kind.get("bullets", [])[:5])
+
+    # Add curated narrative slides
+    for cid in [
+        "bullets_insights_interpretation",
+        "bullets_recommendations",
+        "bullets_risks_limitations",
+        "bullets_next_steps",
+        "bullets_objectives",
+    ]:
+        if cid in by_id:
+            plan.append(by_id[cid])
+
+    # Fill with any remaining bullets if still short
+    chosen_ids = {str(s.get("id", "")) for s in plan}
+    for b in by_kind.get("bullets", []):
+        bid = str(b.get("id", ""))
+        if bid in chosen_ids:
+            continue
+        plan.append(b)
+        chosen_ids.add(bid)
+        if len(plan) >= 12:
+            break
+
     validated = _validate_plan(plan[:12])
     return validated
 
