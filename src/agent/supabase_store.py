@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 from urllib.parse import quote_plus, urlparse
 
 from .logger import get_logger
@@ -37,6 +37,8 @@ class SupabaseStore:
         self.table = table
         self.db_password = db_password
         self.allow_dynamic_columns = allow_dynamic_columns
+        self._skip_columns: Set[str] = set()
+        self._dynamic_add_blocked_until = 0.0
 
     def fetch_latest(self, schema_signature: str) -> Optional[Dict[str, Any]]:
         try:
@@ -56,6 +58,11 @@ class SupabaseStore:
 
     def insert(self, record: Dict[str, Any]) -> None:
         payload = dict(record)
+        for column in list(payload.keys()):
+            normalized = self._normalize_identifier(column)
+            if normalized in self._skip_columns:
+                payload.pop(column, None)
+
         for _ in range(max(len(payload), 1)):
             try:
                 self.client.table(self.table).insert(payload).execute()
@@ -76,6 +83,7 @@ class SupabaseStore:
                         self.table,
                         missing,
                     )
+                    self._skip_columns.add(self._normalize_identifier(missing))
                     payload.pop(missing, None)
                     continue
                 logger.warning("Supabase insert failed: %s", exc)
@@ -89,8 +97,11 @@ class SupabaseStore:
     def _try_add_column(self, column_name: str, sample_value: Any) -> bool:
         if not self.allow_dynamic_columns:
             return False
+        if time.time() < self._dynamic_add_blocked_until:
+            return False
         if not self.db_password:
             logger.warning("SUPABASE_PASSWORD missing; cannot auto-add column '%s'.", column_name)
+            self._dynamic_add_blocked_until = time.time() + 1800
             return False
 
         normalized = self._normalize_identifier(column_name)
@@ -107,6 +118,7 @@ class SupabaseStore:
             import psycopg
         except Exception as exc:  # noqa: BLE001
             logger.warning("psycopg is not available for dynamic schema evolution: %s", exc)
+            self._dynamic_add_blocked_until = time.time() + 1800
             return False
 
         try:
@@ -119,6 +131,13 @@ class SupabaseStore:
                     cur.execute(query)
             return True
         except Exception as exc:  # noqa: BLE001
+            text = str(exc).lower()
+            if "failed to resolve host" in text or "getaddrinfo failed" in text:
+                self._dynamic_add_blocked_until = time.time() + 1800
+                logger.info(
+                    "Dynamic column add paused for 30 minutes due to DNS/connectivity issue on Supabase DB host."
+                )
+                return False
             logger.warning("Dynamic column add failed for '%s': %s", normalized, exc)
             return False
 
