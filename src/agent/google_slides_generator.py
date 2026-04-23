@@ -205,11 +205,11 @@ class GoogleSlidesGenerator:
                     "objectId": shape_id,
                     "shapeProperties": {
                         "shapeBackgroundFill": {
-                            "solidFill": {"color": _rgb(self.brand.palette.neutral)}
+                            "solidFill": {"color": {"rgbColor": _rgb(self.brand.palette.neutral)}}
                         },
                         "outline": {"propertyState": "NOT_RENDERED"},
                     },
-                    "fields": "shapeBackgroundFill.solidFill.color,outline.propertyState",
+                    "fields": "shapeBackgroundFill.solidFill.color.rgbColor,outline.propertyState",
                 }
             },
         ]
@@ -301,7 +301,7 @@ class GoogleSlidesGenerator:
         image_id = _obj_id("chart")
         return [
             {
-                "insertImage": {
+                "createImage": {
                     "objectId": image_id,
                     "url": url,
                     "elementProperties": _element_props(slide_id, 0.8, 1.3, 8.6, 4.9),
@@ -339,10 +339,12 @@ class GoogleSlidesGenerator:
                     "updateShapeProperties": {
                         "objectId": object_id,
                         "shapeProperties": {
-                            "shapeBackgroundFill": {"solidFill": {"color": _rgb(fill)}},
+                            "shapeBackgroundFill": {
+                                "solidFill": {"color": {"rgbColor": _rgb(fill)}}
+                            },
                             "outline": {"propertyState": "NOT_RENDERED"},
                         },
-                        "fields": "shapeBackgroundFill.solidFill.color,outline.propertyState",
+                        "fields": "shapeBackgroundFill.solidFill.color.rgbColor,outline.propertyState",
                     }
                 }
             )
