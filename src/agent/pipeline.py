@@ -22,7 +22,7 @@ from .insight_generator import InsightGenerator
 from .logger import get_logger
 from .processed_registry import ProcessedRegistry
 from .watcher import mark_processed, watch_folder
-from .department_detector import detect_departments
+from .department_detector import DepartmentMatch, detect_departments
 from .prompt_loader import PromptLoader
 from .supabase_store import SupabaseStore
 from .excel_model.runner import ExcelModelRunner
@@ -163,11 +163,16 @@ class AgentPipeline:
                     discovered_kpis=discovery.kpis,
                     domain=discovery.domain,
                 )
-                departments = detect_departments(df.columns.tolist())
+                departments = detect_departments(
+                    df.columns.tolist(),
+                    llm_client=self.llm_client,
+                    available_departments=self.prompt_loader.available_departments(),
+                )
                 if not departments:
-                    logger.warning("No department match found; skipping report generation.")
-                    self._with_retries(lambda: self.drive.move_file(file.id, processed_folder_id))
-                    continue
+                    logger.warning("No department detected by AI; defaulting to executive.")
+                    departments = [
+                        DepartmentMatch(name="executive", score=1, matched_keywords=["fallback"])
+                    ]
 
                 previous = None
                 if self.supabase:

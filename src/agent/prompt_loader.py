@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 
 class PromptLoader:
@@ -17,6 +17,18 @@ class PromptLoader:
         if not path.exists():
             return None
         return path.read_text(encoding="utf-8", errors="replace")
+
+    def available_departments(self) -> List[str]:
+        departments: List[str] = []
+        if (self.base_dir / "executive.md").exists():
+            departments.append("executive")
+        for path in sorted(self.base_dir.glob("*_department.md")):
+            name = path.stem.replace("_department", "").strip().lower()
+            if name and name not in departments:
+                departments.append(name)
+        if not departments:
+            departments = ["executive"]
+        return departments
 
     def _read(self, name: str) -> str:
         path = self.base_dir / name
